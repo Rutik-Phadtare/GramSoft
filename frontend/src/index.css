@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  body {
+    @apply bg-canvas text-ink font-sans;
+    overflow-x: hidden;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  #root {
+    min-height: 100vh;
+    min-width: 0;
+    width: 100%;
+    overflow-x: hidden;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display text-ink;
+  }
+  ::selection {
+    @apply bg-brand-200 text-ink;
+  }
+  img, svg, video, canvas {
+    max-width: 100%;
+  }
+  table {
+    max-width: 100%;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #C7C2B2 transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: #C7C2B2;
+    border-radius: 999px;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface border border-line rounded-xl shadow-card;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors duration-150 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  /* Use alongside .btn, e.g. className="btn btn-primary" */
+  .btn-primary {
+    @apply bg-brand-700 text-white hover:bg-brand-800;
+  }
+  .btn-accent {
+    @apply bg-accent-400 text-ink hover:bg-accent-500;
+  }
+  .btn-ghost {
+    @apply bg-transparent text-ink-soft hover:bg-ink/5;
+  }
+  .btn-outline {
+    @apply border border-line bg-surface text-ink-soft hover:bg-canvas;
+  }
+  .btn-danger {
+    @apply bg-signal-500 text-white hover:bg-signal-600;
+  }
+  .field-label {
+    @apply block text-xs font-semibold uppercase tracking-wide text-ink-muted mb-1.5;
+  }
+  .field-input {
+    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-shadow;
+  }
+  .field-textarea {
+    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-shadow resize-none;
+  }
+}
+
+
+@layer utilities {
+  /* Prevent long labels, tables and third-party widgets from expanding a flex/grid parent. */
+  .layout-safe { min-width: 0; max-width: 100%; }
+  .content-safe { min-width: 0; max-width: 100%; overflow-x: auto; }
+}

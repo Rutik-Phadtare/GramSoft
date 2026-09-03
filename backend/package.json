@@ -1,0 +1,36 @@
+{
+  "name": "gramsoft-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GramSoft internal ops API — Express + MongoDB + Socket.IO",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "seed": "node src/seed/seedAdmin.js",
+    "backfill:software-status": "node src/seed/backfillSoftwareStatus.js",
+    "migrate:activity-fields": "node src/seed/migrateActivityFieldsToConfig.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.5.1",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.1",
+    "socket.io": "^4.7.5",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
