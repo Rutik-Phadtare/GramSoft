@@ -120,15 +120,18 @@ export function SidebarContent({ onNavigate }) {
   const { language, toggleLanguage, t } = useLanguage();
   const notifications = useNotifications();
 
-  // An employee only sees nav items for what an admin has let them view -
-  // a permission that's off just makes the link (and the page behind it)
-  // disappear, rather than showing a dead end.
   const navItems = (isAdmin ? ADMIN_NAV : EMPLOYEE_NAV).filter(
     ({ permission }) =>
       !permission ||
       isAdmin ||
       user?.permissions?.[permission] !== false
   );
+
+  function handleNavigation() {
+    if (typeof onNavigate === "function") {
+      onNavigate();
+    }
+  }
 
   return (
     <>
@@ -163,7 +166,7 @@ export function SidebarContent({ onNavigate }) {
               <NavLink
                 key={to}
                 to={to}
-                onClick={onNavigate}
+                onClick={handleNavigation}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive
@@ -197,6 +200,7 @@ export function SidebarContent({ onNavigate }) {
 
       <div className="px-3 pb-4 space-y-2">
         <button
+          type="button"
           onClick={toggleLanguage}
           className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-white/60 hover:text-white hover:bg-white/5 transition-colors"
           title={t("language")}
@@ -252,6 +256,7 @@ export function SidebarContent({ onNavigate }) {
           </div>
 
           <button
+            type="button"
             onClick={logout}
             title={t("logOut")}
             className="text-white/45 hover:text-white p-1.5 rounded-md hover:bg-white/10 flex-shrink-0"

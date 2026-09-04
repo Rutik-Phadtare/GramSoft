@@ -1,48 +1,82 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useLocation, Link } from "react-router-dom";
-import { Menu, X, Sprout, Search, ChevronRight } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
+import {
+  Menu,
+  X,
+  Sprout,
+  Search,
+  ChevronRight,
+} from "lucide-react";
+import { motion } from "framer-motion";
 import Sidebar, { SidebarContent } from "../components/Sidebar";
 import LiveIndicator from "../components/LiveIndicator";
 import { useAuth } from "../context/AuthContext";
 
-// Turns "/admin/grampanchayats/123" into ["Admin", "Grampanchayats"] - good
-// enough for a lightweight breadcrumb without a route-config table to
-// maintain. IDs (long alphanumeric segments) are dropped since they aren't
-// meaningful on their own; the page's own PageHeader already gives the
-// specific record's name/title.
 function useBreadcrumb() {
   const { pathname } = useLocation();
+
   const segments = pathname.split("/").filter(Boolean);
+
   return segments
     .filter((s) => !/^[a-f0-9]{20,}$/i.test(s))
-    .map((s) => s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
+    .map((s) =>
+      s
+        .replace(/-/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase())
+    );
 }
 
 function DesktopTopbar() {
   const crumbs = useBreadcrumb();
   const { isAdmin } = useAuth();
-  const today = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+
+  const today = new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
 
   return (
     <header className="hidden lg:flex items-center justify-between px-6 h-14 border-b border-line bg-surface/80 backdrop-blur sticky top-0 z-20">
-      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm min-w-0">
+      <nav
+        aria-label="Breadcrumb"
+        className="flex items-center gap-1.5 text-sm min-w-0"
+      >
         {crumbs.map((crumb, i) => (
-          <span key={i} className="flex items-center gap-1.5 min-w-0">
-            {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-ink-muted flex-shrink-0" />}
-            <span className={`truncate ${i === crumbs.length - 1 ? "text-ink font-semibold" : "text-ink-muted"}`}>{crumb}</span>
+          <span
+            key={i}
+            className="flex items-center gap-1.5 min-w-0"
+          >
+            {i > 0 && (
+              <ChevronRight className="h-3.5 w-3.5 text-ink-muted flex-shrink-0" />
+            )}
+
+            <span
+              className={`truncate ${
+                i === crumbs.length - 1
+                  ? "text-ink font-semibold"
+                  : "text-ink-muted"
+              }`}
+            >
+              {crumb}
+            </span>
           </span>
         ))}
       </nav>
+
       <div className="flex items-center gap-3 flex-shrink-0">
-        <span className="text-xs text-ink-muted">{today}</span>
+        <span className="text-xs text-ink-muted">
+          {today}
+        </span>
+
         {isAdmin && (
           <Link
             to="/admin/explorer"
             className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-soft border border-line rounded-lg px-2.5 py-1.5 hover:bg-canvas transition-colors"
             title="Search everything"
           >
-            <Search className="h-3.5 w-3.5" /> Search
+            <Search className="h-3.5 w-3.5" />
+            Search
           </Link>
         )}
       </div>
@@ -52,52 +86,116 @@ function DesktopTopbar() {
 
 export default function AppShell() {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const location = useLocation();
+
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+  };
+
+  const openDrawer = () => {
+    setDrawerOpen(true);
+  };
+
+  // Always close the mobile menu after navigation.
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [location.pathname, location.search, location.hash]);
+
+  // Prevent page scrolling while mobile drawer is open.
+  useEffect(() => {
+    if (drawerOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [drawerOpen]);
+
+  // Escape closes the drawer.
+  useEffect(() => {
+    if (!drawerOpen) return;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setDrawerOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [drawerOpen]);
 
   return (
     <div className="min-h-screen flex bg-canvas">
       <Sidebar />
 
-      {/* Mobile drawer */}
-      <AnimatePresence>
-        {drawerOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-ink/40 z-40 lg:hidden"
-              onClick={() => setDrawerOpen(false)}
-            />
-            <motion.aside
-              initial={{ x: -280 }}
-              animate={{ x: 0 }}
-              exit={{ x: -280 }}
-              transition={{ type: "tween", duration: 0.2 }}
-              className="fixed inset-y-0 left-0 w-64 bg-ink text-white/90 z-50 flex flex-col lg:hidden"
+      {/* Mobile Drawer */}
+      {drawerOpen && (
+        <>
+          {/* Overlay */}
+          <div
+            className="fixed inset-0 bg-ink/50 lg:hidden"
+            style={{ zIndex: 9998 }}
+            onClick={closeDrawer}
+            aria-hidden="true"
+          />
+
+          {/* Drawer */}
+          <motion.aside
+            initial={{ x: "-100%" }}
+            animate={{ x: 0 }}
+            transition={{
+              type: "tween",
+              duration: 0.2,
+            }}
+            className="fixed inset-y-0 left-0 w-[min(16rem,85vw)] bg-ink text-white/90 flex flex-col lg:hidden shadow-2xl"
+            style={{ zIndex: 9999 }}
+          >
+            {/* Close */}
+            <button
+              type="button"
+              onClick={closeDrawer}
+              className="absolute top-4 right-3 flex h-9 w-9 items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 active:bg-white/20 transition-colors"
+              style={{ zIndex: 10000 }}
+              aria-label="Close navigation menu"
             >
-              <button
-                onClick={() => setDrawerOpen(false)}
-                className="absolute top-5 right-3 text-white/60 hover:text-white p-1"
-              >
-                <X className="h-5 w-5" />
-              </button>
-              <SidebarContent onNavigate={() => setDrawerOpen(false)} />
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
+              <X className="h-5 w-5" />
+            </button>
+
+            <SidebarContent onNavigate={closeDrawer} />
+          </motion.aside>
+        </>
+      )}
 
       <div className="flex-1 min-w-0 max-w-full flex flex-col">
+        {/* Mobile topbar */}
         <header className="lg:hidden flex items-center justify-between px-4 py-3 border-b border-line bg-surface sticky top-0 z-30">
-          <button onClick={() => setDrawerOpen(true)} className="p-1.5 -ml-1.5 text-ink-soft">
+          <button
+            type="button"
+            onClick={openDrawer}
+            className="p-1.5 -ml-1.5 text-ink-soft rounded-md hover:bg-canvas active:bg-canvas/80 transition-colors"
+            aria-label="Open navigation menu"
+            aria-expanded={drawerOpen}
+          >
             <Menu className="h-5 w-5" />
           </button>
+
           <div className="flex items-center gap-2">
             <div className="h-6 w-6 rounded-md bg-brand-500 flex items-center justify-center">
               <Sprout className="h-3.5 w-3.5 text-white" />
             </div>
-            <span className="font-display font-semibold text-sm text-ink">GramSoft</span>
+
+            <span className="font-display font-semibold text-sm text-ink">
+              GramSoft
+            </span>
           </div>
+
           <LiveIndicator />
         </header>
 
