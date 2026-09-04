@@ -194,7 +194,7 @@ export default function AdminEmployeeDetail() {
         action={<Badge tone={employee.active ? "brand" : "signal"}>{employee.active ? t("active") : t("inactive")}</Badge>}
       />
 
-      <div className="grid gap-4 grid-cols-2 sm:grid-cols-4 mb-6">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
         <StatCard label={t("loggedToday")} value={stats.logsToday} />
         <StatCard label={t("thisWeek")} value={stats.logsThisWeek} />
         <StatCard label={t("totalLogs")} value={stats.totalLogs} tone="accent" />

@@ -228,7 +228,7 @@ export default function AdminFeedback() {
 
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">Grampanchayat</p>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
                 <DetailField label="Name">{detailTarget.gramPanchayatName}</DetailField>
                 <DetailField label="Taluka">{detailTarget.taluka || "—"}</DetailField>
                 <DetailField label="District">{detailTarget.district || "—"}</DetailField>
@@ -239,7 +239,7 @@ export default function AdminFeedback() {
 
             <div className="pt-3 border-t border-line">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">Software</p>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
                 <DetailField label="Using our software">{detailTarget.isUsingOurSoftware ? t("yes") : t("no")}</DetailField>
                 {!detailTarget.isUsingOurSoftware && <DetailField label="Previously used">{detailTarget.previousSoftwareUsed || "—"}</DetailField>}
                 {detailTarget.softwareStartDate && <DetailField label="Since">{formatDateTime(detailTarget.softwareStartDate)}</DetailField>}
@@ -260,7 +260,7 @@ export default function AdminFeedback() {
 
             <div className="pt-3 border-t border-line">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">Respondent</p>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
                 <DetailField label="Name">{detailTarget.respondentName}</DetailField>
                 <DetailField label="Designation">{detailTarget.respondentDesignation}</DetailField>
                 <DetailField label="Phone">{detailTarget.respondentPhone || "—"}</DetailField>
@@ -277,7 +277,7 @@ export default function AdminFeedback() {
             {detailTarget.customFields && Object.keys(detailTarget.customFields).length > 0 && (
               <div className="pt-3 border-t border-line">
                 <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">Additional questions</p>
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
                   {Object.entries(detailTarget.customFields).map(([key, value]) => (
                     <DetailField key={key} label={key}>
                       {Array.isArray(value) ? value.join(", ") : String(value ?? "—")}

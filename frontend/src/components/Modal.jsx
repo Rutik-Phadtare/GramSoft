@@ -19,7 +19,7 @@ export default function Modal({ open, onClose, title, children, maxWidth = "max-
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.98 }}
               transition={{ duration: 0.15 }}
-              className={`card w-full min-w-0 max-w-[calc(100vw-2rem)] ${maxWidth} max-h-[calc(100vh-2rem)] overflow-y-auto p-6 my-8`}
+              className={`card w-full min-w-0 max-w-[calc(100vw-2rem)] ${maxWidth} max-h-[calc(100vh-2rem)] overflow-y-auto p-4 sm:p-6 my-4 sm:my-8`}
             >
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-display text-lg font-semibold text-ink">{title}</h2>

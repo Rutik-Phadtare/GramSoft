@@ -116,7 +116,7 @@ export default function EmployeeGramPanchayatDetail() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          <div className="card p-5"><h2 className="font-display text-sm font-semibold text-ink mb-3 flex items-center gap-2"><FileText className="h-4 w-4 text-ink-muted" /> {t("registrationDetails")}</h2><dl className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+          <div className="card p-5"><h2 className="font-display text-sm font-semibold text-ink mb-3 flex items-center gap-2"><FileText className="h-4 w-4 text-ink-muted" /> {t("registrationDetails")}</h2><dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
             <div><dt className="text-xs text-ink-muted">{t("mukamPost")}</dt><dd className="font-medium text-ink">{gp.mukamPost || "—"}</dd></div>
             <div><dt className="text-xs text-ink-muted">{t("pincode")}</dt><dd className="font-medium text-ink">{gp.pincode || "—"}</dd></div>
             <div><dt className="text-xs text-ink-muted">{t("officePhone")}</dt><dd className="font-medium text-ink">{gp.officePhone || "—"}</dd></div>
@@ -127,7 +127,7 @@ export default function EmployeeGramPanchayatDetail() {
             <div><dt className="text-xs text-ink-muted">Households</dt><dd className="font-medium text-ink">{gp.numberOfHouseholds ?? "—"}</dd></div>
           </dl></div>
 
-          {(gp.softwareStartDate !== undefined || gp.priceAmount !== undefined) && <div className="card p-5"><h2 className="font-display text-sm font-semibold text-ink mb-3 flex items-center gap-2"><CreditCard className="h-4 w-4 text-ink-muted" /> {t("softwareAndBilling")}</h2><dl className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+          {(gp.softwareStartDate !== undefined || gp.priceAmount !== undefined) && <div className="card p-5"><h2 className="font-display text-sm font-semibold text-ink mb-3 flex items-center gap-2"><CreditCard className="h-4 w-4 text-ink-muted" /> {t("softwareAndBilling")}</h2><dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
             <div><dt className="text-xs text-ink-muted">{t("status")}</dt><dd className="font-medium text-ink">{softwareStatusLabel(gp.softwareUsageStatus)}</dd></div>
             <div><dt className="text-xs text-ink-muted">{t("started")}</dt><dd className="font-medium text-ink">{gp.softwareStartDate ? formatDate(gp.softwareStartDate) : "—"}</dd></div>
             <div><dt className="text-xs text-ink-muted">{t("paymentMode")}</dt><dd className="font-medium text-ink">{gp.paymentMode ? paymentModeLabel(gp.paymentMode) : "—"}</dd></div>

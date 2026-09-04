@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, Landmark, MonitorCheck, Users, Activity, Inbox, UserCog } from "lucide-react";
+import {
+  Search,
+  Landmark,
+  MonitorCheck,
+  Users,
+  Activity,
+  Inbox,
+  UserCog,
+} from "lucide-react";
 import { overviewApi } from "../../api/overview";
 import { useSocketEvent } from "../../context/SocketContext";
 import { useNotifications } from "../../context/NotificationContext";
@@ -26,8 +34,12 @@ export default function AdminDashboard() {
   useEffect(() => {
     refresh();
   }, []);
+
   const { markSectionRead } = useNotifications();
-  useEffect(() => { markSectionRead("dashboard"); }, []);
+
+  useEffect(() => {
+    markSectionRead("dashboard");
+  }, []);
 
   // The heart of "owner sees everything, live" - every activity entry from
   // every employee lands here the instant it's saved, no refresh needed.
@@ -35,21 +47,61 @@ export default function AdminDashboard() {
     setData((prev) => {
       if (!prev) return prev;
       if (prev.recent.some((e) => e._id === entry._id)) return prev;
+
       return {
         ...prev,
         recent: [entry, ...prev.recent].slice(0, 20),
-        stats: { ...prev.stats, activitiesThisWeek: prev.stats.activitiesThisWeek + 1 },
+        stats: {
+          ...prev.stats,
+          activitiesThisWeek:
+            prev.stats.activitiesThisWeek + 1,
+        },
       };
     });
   });
+
   useSocketEvent("feedback:new", () => {
-    setData((prev) => (prev ? { ...prev, stats: { ...prev.stats, pendingFeedback: prev.stats.pendingFeedback + 1 } } : prev));
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            stats: {
+              ...prev.stats,
+              pendingFeedback:
+                prev.stats.pendingFeedback + 1,
+            },
+          }
+        : prev
+    );
   });
+
   useSocketEvent("gramPanchayat:new", () => {
-    setData((prev) => (prev ? { ...prev, stats: { ...prev.stats, totalGPs: prev.stats.totalGPs + 1 } } : prev));
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            stats: {
+              ...prev.stats,
+              totalGPs: prev.stats.totalGPs + 1,
+            },
+          }
+        : prev
+    );
   });
+
   useSocketEvent("person:new", () => {
-    setData((prev) => (prev ? { ...prev, stats: { ...prev.stats, totalContacts: prev.stats.totalContacts + 1 } } : prev));
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            stats: {
+              ...prev.stats,
+              totalContacts:
+                prev.stats.totalContacts + 1,
+            },
+          }
+        : prev
+    );
   });
 
   const stats = data?.stats;
@@ -61,31 +113,110 @@ export default function AdminDashboard() {
         title={t("everythingAtAGlance")}
         description={t("liveAcrossEveryone")}
         action={
-          <Link to="/admin/explorer" className="btn btn-outline">
+          <Link
+            to="/admin/explorer"
+            className="btn btn-outline w-full sm:w-auto"
+          >
             <Search className="h-4 w-4" />
             {t("openExplorer")}
           </Link>
         }
       />
 
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 mb-6">
-        <StatCard label={t("grampanchayats")} value={loading ? "—" : stats?.totalGPs ?? 0} icon={Landmark} />
-        <StatCard label={t("usingOurSoftware")} value={loading ? "—" : stats?.usingSoftwareGPs ?? 0} tone="accent" icon={MonitorCheck} />
-        <StatCard label={t("contactsOnFile")} value={loading ? "—" : stats?.totalContacts ?? 0} icon={Users} />
-        <StatCard label={t("activityThisWeek")} value={loading ? "—" : stats?.activitiesThisWeek ?? 0} icon={Activity} />
-        <StatCard label={t("pendingFeedback")} value={loading ? "—" : stats?.pendingFeedback ?? 0} tone="accent" icon={Inbox} />
-        <StatCard label={t("activeEmployees")} value={loading ? "—" : stats?.activeEmployees ?? 0} icon={UserCog} />
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6">
+        <Link
+          to="/admin/grampanchayats"
+          className="block min-w-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+          aria-label={t("grampanchayats")}
+        >
+          <StatCard
+            label={t("grampanchayats")}
+            value={loading ? "—" : stats?.totalGPs ?? 0}
+            icon={Landmark}
+          />
+        </Link>
+
+        <Link
+          to="/admin/grampanchayats"
+          className="block min-w-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2"
+          aria-label={t("usingOurSoftware")}
+        >
+          <StatCard
+            label={t("usingOurSoftware")}
+            value={loading ? "—" : stats?.usingSoftwareGPs ?? 0}
+            tone="accent"
+            icon={MonitorCheck}
+          />
+        </Link>
+
+        <Link
+          to="/admin/contacts"
+          className="block min-w-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+          aria-label={t("contactsOnFile")}
+        >
+          <StatCard
+            label={t("contactsOnFile")}
+            value={loading ? "—" : stats?.totalContacts ?? 0}
+            icon={Users}
+          />
+        </Link>
+
+        <Link
+          to="/admin/explorer"
+          className="block min-w-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+          aria-label={t("activityThisWeek")}
+        >
+          <StatCard
+            label={t("activityThisWeek")}
+            value={loading ? "—" : stats?.activitiesThisWeek ?? 0}
+            icon={Activity}
+          />
+        </Link>
+
+        <Link
+          to="/admin/feedback"
+          className="block min-w-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2"
+          aria-label={t("pendingFeedback")}
+        >
+          <StatCard
+            label={t("pendingFeedback")}
+            value={loading ? "—" : stats?.pendingFeedback ?? 0}
+            tone="accent"
+            icon={Inbox}
+          />
+        </Link>
+
+        <Link
+          to="/admin/employees"
+          className="block min-w-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+          aria-label={t("activeEmployees")}
+        >
+          <StatCard
+            label={t("activeEmployees")}
+            value={loading ? "—" : stats?.activeEmployees ?? 0}
+            icon={UserCog}
+          />
+        </Link>
       </div>
 
       <div className="card p-5">
-        <h2 className="font-display text-sm font-semibold text-ink mb-1">{t("liveActivity")}</h2>
-        <p className="text-xs text-ink-muted mb-3">{t("streamingIn")}</p>
+        <h2 className="font-display text-sm font-semibold text-ink mb-1">
+          {t("liveActivity")}
+        </h2>
+
+        <p className="text-xs text-ink-muted mb-3">
+          {t("streamingIn")}
+        </p>
+
         {loading ? (
           <SkeletonRows rows={6} />
         ) : data?.recent?.length ? (
           <LiveActivityFeed entries={data.recent} />
         ) : (
-          <EmptyState title={t("noActivityAtAll")} hint={t("willShowUpHere")} />
+          <EmptyState
+            title={t("noActivityAtAll")}
+            hint={t("willShowUpHere")}
+          />
         )}
       </div>
     </div>

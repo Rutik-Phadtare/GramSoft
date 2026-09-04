@@ -344,7 +344,7 @@ export default function AdminGramPanchayatDetail() {
                   <div><label className="field-label">{t("taluka")}</label><input className="field-input" value={form.taluka} onChange={(e) => setForm((f) => ({ ...f, taluka: e.target.value }))} /></div>
                   <div><label className="field-label">{t("district")}</label><input className="field-input" value={form.district} onChange={(e) => setForm((f) => ({ ...f, district: e.target.value }))} /></div>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="field-label">Status</label>
                     <select className="field-input" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}>
@@ -358,7 +358,7 @@ export default function AdminGramPanchayatDetail() {
                 </div>
               </div>
             ) : (
-              <dl className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+              <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                 <div><dt className="text-xs text-ink-muted mb-0.5">{t("taluka")}</dt><dd className="font-medium text-ink">{gp.taluka}</dd></div>
                 <div><dt className="text-xs text-ink-muted mb-0.5">{t("district")}</dt><dd className="font-medium text-ink">{gp.district}</dd></div>
                 <div><dt className="text-xs text-ink-muted mb-0.5">Status</dt><dd className="font-medium text-ink capitalize">{gp.status}</dd></div>
@@ -410,7 +410,7 @@ export default function AdminGramPanchayatDetail() {
                 </div>
               </div>
             ) : (
-              <dl className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+              <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                 <div><dt className="text-xs text-ink-muted mb-0.5">{t("mukamPost")}</dt><dd className="font-medium text-ink">{gp.mukamPost || "—"}</dd></div>
                 <div><dt className="text-xs text-ink-muted mb-0.5">{t("pincode")}</dt><dd className="font-medium text-ink">{gp.pincode || "—"}</dd></div>
                 <div><dt className="text-xs text-ink-muted mb-0.5">{t("waterSupply")}</dt><dd className="font-medium text-ink">{gp.waterSupplyMode ? (gp.waterSupplyMode === "combined" ? t("combined") : t("separate")) : "—"}</dd></div>
@@ -461,7 +461,7 @@ export default function AdminGramPanchayatDetail() {
                 )}
               </div>
             ) : (
-              <dl className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+              <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                 <div><dt className="text-xs text-ink-muted mb-0.5">{t("status")}</dt><dd className="font-medium text-ink">{softwareStatusLabel(gp.softwareUsageStatus)}</dd></div>
                 <div><dt className="text-xs text-ink-muted mb-0.5">{t("started")}</dt><dd className="font-medium text-ink">{gp.softwareStartDate ? formatDate(gp.softwareStartDate) : "—"}</dd></div>
                 <div><dt className="text-xs text-ink-muted mb-0.5">{gp.isUsingOurSoftware ? t("renewalDue") : t("ended")}</dt><dd className="font-medium text-ink">{gp.subscriptionEndDate ? formatDate(gp.subscriptionEndDate) : "—"}</dd></div>
@@ -518,7 +518,7 @@ export default function AdminGramPanchayatDetail() {
                   onChange={(key, value) => setCustomValues((v) => ({ ...v, [key]: value }))}
                 />
               ) : (
-                <dl className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                   {customFieldDefs.map((field) => (
                     <div key={field.key}>
                       <dt className="text-xs text-ink-muted mb-0.5">{field.label}</dt>

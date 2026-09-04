@@ -55,7 +55,7 @@ export default function ActivityLogCard({ entry, showEmployee = false, onOpenPer
             {entry.clientInterest && <Badge tone={clientInterestTone(entry.clientInterest)}>{activityTypeLabel(entry.clientInterest)}</Badge>}
           </div>
 
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
             {entry.employeeId?.name && (
               <Field label="Logged by">{entry.employeeId.name}</Field>
             )}
@@ -80,7 +80,7 @@ export default function ActivityLogCard({ entry, showEmployee = false, onOpenPer
           {entry.customFields && Object.keys(entry.customFields).length > 0 && (
             <div className="pt-3 border-t border-line">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">Additional answers</p>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
                 {Object.entries(entry.customFields).map(([key, value]) => (
                   <Field key={key} label={key}>
                     {Array.isArray(value) ? value.join(", ") : String(value ?? "—")}

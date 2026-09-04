@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Sprout, Eye, EyeOff, Languages } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -17,10 +17,12 @@ export default function Login() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  if (user) {
+  useEffect(() => {
+    if (!user) return;
+
     const fallback = isAdmin ? "/admin/dashboard" : "/dashboard";
     navigate(location.state?.from?.pathname || fallback, { replace: true });
-  }
+  }, [user, isAdmin, navigate, location.state?.from?.pathname]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -59,7 +61,7 @@ export default function Login() {
           <p className="text-sm text-white/45 mt-1">{t("signInTitle")}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="card p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="card p-5 sm:p-6 space-y-4">
           {error && (
             <div className="rounded-lg bg-signal-50 text-signal-600 text-sm px-3 py-2">{error}</div>
           )}

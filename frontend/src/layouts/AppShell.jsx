@@ -81,7 +81,7 @@ export default function AppShell() {
               >
                 <X className="h-5 w-5" />
               </button>
-              <SidebarContent />
+              <SidebarContent onNavigate={() => setDrawerOpen(false)} />
             </motion.aside>
           </>
         )}

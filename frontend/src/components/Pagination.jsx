@@ -12,7 +12,7 @@ export default function Pagination({ pagination, onPageChange }) {
   const end = Math.min(page * limit, total);
 
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-line text-sm">
+    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-t border-line text-sm">
       <span className="text-ink-muted">
         {start}–{end} of {total}
       </span>
@@ -24,7 +24,7 @@ export default function Pagination({ pagination, onPageChange }) {
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <span className="text-ink-muted px-1 tabular-nums">
+        <span className="text-ink-muted px-1 tabular-nums whitespace-nowrap">
           Page {page} of {totalPages}
         </span>
         <button
