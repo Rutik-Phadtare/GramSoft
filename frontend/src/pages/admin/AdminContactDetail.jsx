@@ -38,6 +38,7 @@ export default function AdminContactDetail() {
       setData(d);
       setForm({
         name: d.person.name, nameMr: d.person.nameMr || "", designation: d.person.designation,
+        designationMr: d.person.designationMr || "",
         phone: d.person.phone || "", email: d.person.email || "",
         address: d.person.address || "", addressMr: d.person.addressMr || "",
         district: d.person.district || "", notes: d.person.notes || "",
@@ -117,7 +118,7 @@ export default function AdminContactDetail() {
       </Link>
 
       <PageHeader
-        eyebrow={data.person.designation}
+        eyebrow={data.person.designationMr ? `${data.person.designation} · ${data.person.designationMr}` : data.person.designation}
         title={data.person.nameMr ? `${data.person.name} · ${data.person.nameMr}` : data.person.name}
         description={data.person.phone}
         action={
@@ -255,6 +256,7 @@ export default function AdminContactDetail() {
               {DESIGNATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
+          <div><label className="field-label">{t("designationMarathi")}</label><input className="field-input" value={form.designationMr} onChange={(e) => setForm((f) => ({ ...f, designationMr: e.target.value }))} /></div>
           <div><label className="field-label">{t("phone")}</label><input className="field-input" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
           <div><label className="field-label">{t("email")}</label><input type="email" className="field-input" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div>
           <div><label className="field-label">{t("address")} (English)</label><textarea className="field-textarea" rows={2} value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} /></div>

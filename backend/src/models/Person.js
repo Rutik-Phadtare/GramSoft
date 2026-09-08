@@ -14,10 +14,28 @@ const PersonSchema = new Schema(
     // meant to be typed by a person who actually knows the spelling - never
     // machine-translated, since transliteration of proper nouns is exactly
     // where automated translation gets names/places wrong.
-    name: { type: String, required: true, trim: true },
+    // `name` (English) is no longer unconditionally required - a
+    // Marathi-only bulk import row (person_name_marathi with no person_name)
+    // is allowed to create a Person with only `nameMr` set. Conditionally
+    // required (rather than unconditionally, as before) - only required
+    // when nameMr is also blank.
+    name: {
+      type: String,
+      trim: true,
+      required: [
+        function () {
+          return !(this.nameMr && this.nameMr.trim());
+        },
+        "Either name (English) or nameMr (Marathi) is required",
+      ],
+    },
     nameMr: { type: String, trim: true },
-    nameKey: { type: String, required: true },
+    nameKey: { type: String, required: true }, // normalized name (English if present, else Marathi)
     designation: { type: String, enum: DESIGNATIONS, required: true },
+    // Marathi label for the designation (e.g. "तलाठी" for "Talathi"). Kept as
+    // free text rather than a second enum since the English `designation` is
+    // what all filtering/single-holder logic keys off - this is display-only.
+    designationMr: { type: String, trim: true },
     phone: { type: String, trim: true }, // normalized to last 10 digits, unique when present
     previousPhones: [{ number: String, replacedAt: Date }], // superseded numbers, oldest first
     email: { type: String, trim: true, lowercase: true },

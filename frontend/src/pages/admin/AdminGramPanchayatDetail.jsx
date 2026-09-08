@@ -33,7 +33,7 @@ const RATE_TABS = [
 // Which form fields belong to which card, so "Save" on one card only ever
 // touches that card's data - editing the billing card can never
 // accidentally overwrite the name, and vice versa.
-const OVERVIEW_FIELDS = ["name", "nameMr", "taluka", "district", "status", "population", "numberOfHouseholds"];
+const OVERVIEW_FIELDS = ["name", "nameMr", "taluka", "talukaMr", "district", "districtMr", "status", "population", "numberOfHouseholds"];
 const REGISTRATION_FIELDS = [
   "mukamPost", "pincode", "officePhone", "officeEmail", "gpType", "waterSupplyMode",
   "reassessmentYearFrom", "reassessmentYearTo",
@@ -44,7 +44,7 @@ const BILLING_FIELDS = [
 ];
 
 const emptyEditForm = {
-  name: "", nameMr: "", taluka: "", district: "", pincode: "", officePhone: "", officeEmail: "",
+  name: "", nameMr: "", taluka: "", talukaMr: "", district: "", districtMr: "", pincode: "", officePhone: "", officeEmail: "",
   population: "", numberOfHouseholds: "", mukamPost: "", gpType: "", waterSupplyMode: "",
   reassessmentYearFrom: "", reassessmentYearTo: "",
   status: "prospect", isUsingOurSoftware: false, softwareStartDate: "", subscriptionEndDate: "",
@@ -109,7 +109,7 @@ export default function AdminGramPanchayatDetail() {
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [addMode, setAddMode] = useState("search");
   const [existingPerson, setExistingPerson] = useState(null);
-  const [newContactForm, setNewContactForm] = useState({ name: "", nameMr: "", designation: "Talathi", phone: "", email: "" });
+  const [newContactForm, setNewContactForm] = useState({ name: "", nameMr: "", designation: "Talathi", designationMr: "", phone: "", email: "" });
   const [addContactError, setAddContactError] = useState("");
   const [addingContact, setAddingContact] = useState(false);
   const [replaceConfirm, setReplaceConfirm] = useState(null); // { conflict, message } - set when the backend reports an existing holder
@@ -120,7 +120,8 @@ export default function AdminGramPanchayatDetail() {
 
   function formFromGp(gp) {
     return {
-      name: gp.name, nameMr: gp.nameMr || "", taluka: gp.taluka, district: gp.district, pincode: gp.pincode || "",
+      name: gp.name, nameMr: gp.nameMr || "", taluka: gp.taluka, talukaMr: gp.talukaMr || "",
+      district: gp.district, districtMr: gp.districtMr || "", pincode: gp.pincode || "",
       officePhone: gp.officePhone || "", officeEmail: gp.officeEmail || "",
       population: gp.population ?? "", numberOfHouseholds: gp.numberOfHouseholds ?? "",
       mukamPost: gp.mukamPost || "", gpType: gp.gpType || "", waterSupplyMode: gp.waterSupplyMode || "",
@@ -236,7 +237,7 @@ export default function AdminGramPanchayatDetail() {
   function openAddContact() {
     setAddMode("search");
     setExistingPerson(null);
-    setNewContactForm({ name: "", nameMr: "", designation: "Talathi", phone: "", email: "" });
+    setNewContactForm({ name: "", nameMr: "", designation: "Talathi", designationMr: "", phone: "", email: "" });
     setAddContactError("");
     setReplaceConfirm(null);
     setAddContactOpen(true);
@@ -342,7 +343,9 @@ export default function AdminGramPanchayatDetail() {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div><label className="field-label">{t("taluka")}</label><input className="field-input" value={form.taluka} onChange={(e) => setForm((f) => ({ ...f, taluka: e.target.value }))} /></div>
+                  <div><label className="field-label">{t("talukaMarathi")}</label><input className="field-input" value={form.talukaMr} onChange={(e) => setForm((f) => ({ ...f, talukaMr: e.target.value }))} /></div>
                   <div><label className="field-label">{t("district")}</label><input className="field-input" value={form.district} onChange={(e) => setForm((f) => ({ ...f, district: e.target.value }))} /></div>
+                  <div><label className="field-label">{t("districtMarathi")}</label><input className="field-input" value={form.districtMr} onChange={(e) => setForm((f) => ({ ...f, districtMr: e.target.value }))} /></div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
@@ -359,8 +362,8 @@ export default function AdminGramPanchayatDetail() {
               </div>
             ) : (
               <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-                <div><dt className="text-xs text-ink-muted mb-0.5">{t("taluka")}</dt><dd className="font-medium text-ink">{gp.taluka}</dd></div>
-                <div><dt className="text-xs text-ink-muted mb-0.5">{t("district")}</dt><dd className="font-medium text-ink">{gp.district}</dd></div>
+                <div><dt className="text-xs text-ink-muted mb-0.5">{t("taluka")}</dt><dd className="font-medium text-ink">{gp.taluka}{gp.talukaMr ? ` · ${gp.talukaMr}` : ""}</dd></div>
+                <div><dt className="text-xs text-ink-muted mb-0.5">{t("district")}</dt><dd className="font-medium text-ink">{gp.district}{gp.districtMr ? ` · ${gp.districtMr}` : ""}</dd></div>
                 <div><dt className="text-xs text-ink-muted mb-0.5">Status</dt><dd className="font-medium text-ink capitalize">{gp.status}</dd></div>
                 <div><dt className="text-xs text-ink-muted mb-0.5">{t("population")}</dt><dd className="font-medium text-ink">{gp.population != null ? gp.population.toLocaleString("en-IN") : "—"}</dd></div>
                 <div><dt className="text-xs text-ink-muted mb-0.5">{t("households")}</dt><dd className="font-medium text-ink">{gp.numberOfHouseholds != null ? gp.numberOfHouseholds.toLocaleString("en-IN") : "—"}</dd></div>
@@ -663,6 +666,7 @@ export default function AdminGramPanchayatDetail() {
                 {DESIGNATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
+            <div><label className="field-label">{t("designationMarathi")}</label><input className="field-input" value={newContactForm.designationMr} onChange={(e) => setNewContactForm((f) => ({ ...f, designationMr: e.target.value }))} /></div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div><label className="field-label">{t("phone")}</label><input className="field-input" value={newContactForm.phone} onChange={(e) => setNewContactForm((f) => ({ ...f, phone: e.target.value }))} /></div>
               <div><label className="field-label">{t("email")}</label><input type="email" className="field-input" value={newContactForm.email} onChange={(e) => setNewContactForm((f) => ({ ...f, email: e.target.value }))} /></div>

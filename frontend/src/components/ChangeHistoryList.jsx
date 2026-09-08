@@ -3,9 +3,10 @@ import EmptyState from "./EmptyState";
 import { formatDateTime } from "../utils/format";
 
 const FIELD_LABELS = {
-  name: "Name", nameMr: "Name (Marathi)", designation: "Designation", phone: "Phone",
-  email: "Email", address: "Address", addressMr: "Address (Marathi)", district: "District",
-  notes: "Notes", taluka: "Taluka",
+  name: "Name", nameMr: "Name (Marathi)", designation: "Designation", designationMr: "Designation (Marathi)",
+  phone: "Phone", email: "Email", address: "Address", addressMr: "Address (Marathi)",
+  district: "District", districtMr: "District (Marathi)", notes: "Notes",
+  taluka: "Taluka", talukaMr: "Taluka (Marathi)",
 };
 
 function displayValue(value) {

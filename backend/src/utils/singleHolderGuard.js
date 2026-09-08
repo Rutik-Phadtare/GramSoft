@@ -22,7 +22,7 @@ async function findHolderConflict({ gramPanchayatId, designation, excludePersonI
     toDate: null,
     designationAtAssignment: designation,
     personId: { $ne: excludePersonId },
-  }).populate("personId", "name nameMr phone email designation");
+  }).populate("personId", "name nameMr phone email designation designationMr");
 
   return conflict || null;
 }

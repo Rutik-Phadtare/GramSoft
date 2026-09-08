@@ -19,7 +19,7 @@ const PAYMENT_MODES = ["cash", "upi", "bank_transfer", "cheque", "other"];
 const PAGE_SIZE = 25;
 
 const emptyForm = {
-  name: "", nameMr: "", taluka: "", district: "", pincode: "", mukamPost: "",
+  name: "", nameMr: "", taluka: "", talukaMr: "", district: "", districtMr: "", pincode: "", mukamPost: "",
   officePhone: "", officeEmail: "", gpType: "", waterSupplyMode: "",
   population: "", numberOfHouseholds: "", isUsingOurSoftware: false,
   softwareStartDate: "", subscriptionEndDate: "", subscriptionYears: "", priceAmount: "", paymentMode: "", previousSoftwareUsed: "",
@@ -198,7 +198,9 @@ export default function AdminGramPanchayats() {
               <div><label className="field-label">{t("name")} (English)</label><input className="field-input" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div>
               <div><label className="field-label">{t("nameMarathi")}</label><input className="field-input" value={form.nameMr} onChange={(e) => setForm((f) => ({ ...f, nameMr: e.target.value }))} /></div>
               <div><label className="field-label">{t("taluka")}</label><input className="field-input" value={form.taluka} onChange={(e) => setForm((f) => ({ ...f, taluka: e.target.value }))} /></div>
+              <div><label className="field-label">{t("talukaMarathi")}</label><input className="field-input" value={form.talukaMr} onChange={(e) => setForm((f) => ({ ...f, talukaMr: e.target.value }))} /></div>
               <div><label className="field-label">{t("district")}</label><input className="field-input" value={form.district} onChange={(e) => setForm((f) => ({ ...f, district: e.target.value }))} /></div>
+              <div><label className="field-label">{t("districtMarathi")}</label><input className="field-input" value={form.districtMr} onChange={(e) => setForm((f) => ({ ...f, districtMr: e.target.value }))} /></div>
               <div><label className="field-label">{t("mukamPost")}</label><input className="field-input" value={form.mukamPost} onChange={(e) => setForm((f) => ({ ...f, mukamPost: e.target.value }))} /></div>
               <div><label className="field-label">{t("pincode")}</label><input className="field-input" value={form.pincode} onChange={(e) => setForm((f) => ({ ...f, pincode: e.target.value }))} /></div>
               <div><label className="field-label">{t("officePhone")}</label><input className="field-input" value={form.officePhone} onChange={(e) => setForm((f) => ({ ...f, officePhone: e.target.value }))} /></div>

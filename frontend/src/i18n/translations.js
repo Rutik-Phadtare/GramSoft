@@ -26,7 +26,8 @@ export const translations = {
 
     // Common fields
     name: "Name", nameMarathi: "Name (Marathi)", address: "Address", addressMarathi: "Address (Marathi)",
-    phone: "Phone", email: "Email", designation: "Designation", taluka: "Taluka", district: "District",
+    phone: "Phone", email: "Email", designation: "Designation", designationMarathi: "Designation (Marathi)",
+    taluka: "Taluka", talukaMarathi: "Taluka (Marathi)", district: "District", districtMarathi: "District (Marathi)",
     pincode: "Pincode", grampanchayat: "Grampanchayat", notes: "Notes", status: "Status",
     population: "Population", households: "Households", date: "Date", sortBy: "Sort by",
 
@@ -172,7 +173,8 @@ export const translations = {
     required: "आवश्यक", all: "सर्व", none: "काहीही नाही", total: "एकूण", actions: "क्रिया",
 
     name: "नाव", nameMarathi: "नाव (मराठी)", address: "पत्ता", addressMarathi: "पत्ता (मराठी)",
-    phone: "फोन नं.", email: "ईमेल", designation: "पदनाम", taluka: "तालुका", district: "जिल्हा",
+    phone: "फोन नं.", email: "ईमेल", designation: "पदनाम", designationMarathi: "पदनाम (मराठी)",
+    taluka: "तालुका", talukaMarathi: "तालुका (मराठी)", district: "जिल्हा", districtMarathi: "जिल्हा (मराठी)",
     pincode: "पिन कोड", grampanchayat: "ग्रामपंचायत", notes: "टीप", status: "स्थिती",
     population: "लोकसंख्या", households: "घरांची संख्या", date: "दिनांक", sortBy: "क्रमवारी",
 

@@ -35,7 +35,7 @@ async function withPostingHistory(persons) {
     persons.map(async (person) => {
       const assignments = await PersonAssignment.find({ personId: person._id })
         .sort({ fromDate: -1 })
-        .populate("gramPanchayatId", "name taluka district softwareUsageStatus");
+        .populate("gramPanchayatId", "name nameMr taluka talukaMr district districtMr softwareUsageStatus");
       return {
         ...person,
         totalGramPanchayatsHandled: new Set(assignments.map((a) => a.gramPanchayatId?._id?.toString())).size,
@@ -73,9 +73,13 @@ const listPersons = asyncHandler(async (req, res) => {
   let results;
   let total;
 
+  // Matches on the normalized English key (as before) or the raw Marathi
+  // name, prefix-anchored the same way, so searching in Marathi returns the
+  // same contacts that searching in English already did.
+  const qFilter = q ? { $or: [{ nameKey: { $regex: `^${escapeRegex(normalizeName(q))}`, $options: "i" } }, { nameMr: { $regex: `^${escapeRegex(normalizeName(q))}`, $options: "i" } }] } : {};
+
   if (!needsPostingJoin) {
-    const filter = {};
-    if (q) filter.nameKey = { $regex: `^${escapeRegex(normalizeName(q))}` };
+    const filter = { ...qFilter };
     if (designation) filter.designation = designation;
     if (district) filter.district = district;
 
@@ -84,8 +88,7 @@ const listPersons = asyncHandler(async (req, res) => {
       Person.countDocuments(filter),
     ]);
   } else {
-    const personMatch = {};
-    if (q) personMatch.nameKey = { $regex: `^${escapeRegex(normalizeName(q))}` };
+    const personMatch = { ...qFilter };
     if (designation) personMatch.designation = designation;
     if (district) personMatch.district = district;
 
@@ -156,26 +159,35 @@ const getFilterOptions = asyncHandler(async (req, res) => {
 const exportPersons = asyncHandler(async (req, res) => {
   const { q, designation, district } = req.query;
   const filter = {};
-  if (q) filter.nameKey = { $regex: `^${escapeRegex(normalizeName(q))}` };
+  if (q) {
+    const qRegex = { $regex: `^${escapeRegex(normalizeName(q))}`, $options: "i" };
+    filter.$or = [{ nameKey: qRegex }, { nameMr: qRegex }];
+  }
   if (designation) filter.designation = designation;
   if (district) filter.district = district;
 
   const persons = await Person.find(filter).sort({ name: 1 }).limit(20000).lean();
   const personIds = persons.map((p) => p._id);
   const assignments = await PersonAssignment.find({ personId: { $in: personIds }, toDate: null })
-    .populate("gramPanchayatId", "name taluka district");
+    .populate("gramPanchayatId", "name nameMr taluka talukaMr district districtMr");
 
   const currentGpByPerson = new Map();
   for (const a of assignments) {
     if (!currentGpByPerson.has(a.personId.toString())) currentGpByPerson.set(a.personId.toString(), a.gramPanchayatId);
   }
 
-  const header = ["name", "name_marathi", "designation", "phone", "email", "address", "address_marathi", "district", "current_grampanchayat", "current_taluka"];
+  const header = [
+    "name", "name_marathi", "designation", "designation_marathi", "phone", "email",
+    "address", "address_marathi", "district", "current_grampanchayat", "current_grampanchayat_marathi",
+    "current_taluka", "current_taluka_marathi",
+  ];
   const csvEscape = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const rows = persons.map((p) => {
     const gp = currentGpByPerson.get(p._id.toString());
-    return [p.name, p.nameMr, p.designation, p.phone, p.email, p.address, p.addressMr, p.district, gp?.name, gp?.taluka]
-      .map(csvEscape).join(",");
+    return [
+      p.name, p.nameMr, p.designation, p.designationMr, p.phone, p.email,
+      p.address, p.addressMr, p.district, gp?.name, gp?.nameMr, gp?.taluka, gp?.talukaMr,
+    ].map(csvEscape).join(",");
   });
   const csv = [header.join(","), ...rows].join("\n");
 
@@ -186,7 +198,7 @@ const exportPersons = asyncHandler(async (req, res) => {
 
 // POST /api/persons - admin only
 const createPerson = asyncHandler(async (req, res) => {
-  const { name, nameMr, designation, phone, email, address, addressMr, district, notes } = req.body;
+  const { name, nameMr, designation, designationMr, phone, email, address, addressMr, district, notes } = req.body;
   if (!name || !designation) {
     return res.status(400).json({ error: "name and designation are required" });
   }
@@ -204,6 +216,7 @@ const createPerson = asyncHandler(async (req, res) => {
     nameMr,
     nameKey: normalizeName(name),
     designation,
+    designationMr,
     phone: normalizedPhone,
     email,
     address,
@@ -223,7 +236,7 @@ const getPerson = asyncHandler(async (req, res) => {
 
   const assignments = await PersonAssignment.find({ personId: req.params.id })
     .sort({ fromDate: -1 })
-    .populate("gramPanchayatId", "name taluka district softwareUsageStatus");
+    .populate("gramPanchayatId", "name nameMr taluka talukaMr district districtMr softwareUsageStatus");
 
   const activity = await ActivityLog.find({ personId: req.params.id })
     .sort({ date: -1 })
@@ -251,7 +264,7 @@ const getPersonHistory = asyncHandler(async (req, res) => {
 
 // PATCH /api/persons/:id - admin only
 const updatePerson = asyncHandler(async (req, res) => {
-  const allowed = ["name", "nameMr", "designation", "email", "address", "addressMr", "district", "notes"];
+  const allowed = ["name", "nameMr", "designation", "designationMr", "email", "address", "addressMr", "district", "notes"];
   const updates = {};
   for (const key of allowed) {
     if (key in req.body) updates[key] = req.body[key];

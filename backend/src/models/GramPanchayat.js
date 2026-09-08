@@ -14,11 +14,29 @@ const WATER_SUPPLY_MODES = ["combined", "separate"]; // एकत्र / वे
 
 const GramPanchayatSchema = new Schema(
   {
-    name: { type: String, required: true, trim: true },
+    // `name` (English) is no longer unconditionally required - a
+    // Marathi-only bulk import row (grampanchayat_name_marathi with no
+    // grampanchayat_name) is allowed to create a GP with only `nameMr` set.
+    // The validator below still requires at least one of the two.
+    name: {
+      type: String,
+      trim: true,
+      // Conditionally required (rather than unconditionally, as before) -
+      // only required when nameMr is also blank, so a Marathi-only record
+      // (nameMr set, name blank) is valid but a record with neither is not.
+      required: [
+        function () {
+          return !(this.nameMr && this.nameMr.trim());
+        },
+        "Either name (English) or nameMr (Marathi) is required",
+      ],
+    },
     nameMr: { type: String, trim: true },
-    nameKey: { type: String, required: true }, // normalized name, used for dedupe matching
+    nameKey: { type: String, required: true }, // normalized name (English if present, else Marathi), used for dedupe matching
     taluka: { type: String, required: true, trim: true },
+    talukaMr: { type: String, trim: true },
     district: { type: String, required: true, trim: true },
+    districtMr: { type: String, trim: true },
     pincode: { type: String, trim: true },
     officePhone: { type: String, trim: true },
     officeEmail: { type: String, trim: true, lowercase: true },

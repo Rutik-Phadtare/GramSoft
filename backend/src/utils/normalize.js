@@ -21,4 +21,23 @@ function escapeRegex(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-module.exports = { normalizeName, normalizePhone, escapeRegex };
+// Bulk-import sheets sometimes carry a filler value (left over from a
+// template that used to require every column) instead of a real name. Those
+// must never be treated as an actual English/Marathi name - counting one as
+// "provided" would both (a) defeat making the other-language name optional,
+// and (b) let two unrelated rows collide on the same normalized key (e.g.
+// two different GPs both keyed on "n/a") and get merged together.
+const PLACEHOLDER_NAME_VALUES = new Set([
+  "n/a", "na", "n.a", "n.a.", "none", "nil", "null", "not applicable", "unknown", "tbd", "-", "--", "_",
+]);
+
+function isPlaceholderName(value) {
+  const trimmed = String(value || "").trim().toLowerCase();
+  if (!trimmed) return true;
+  if (PLACEHOLDER_NAME_VALUES.has(trimmed)) return true;
+  // Values that are nothing but underscores/dashes/dots (any length: "_", "___", "---", "...")
+  if (/^[_\-.]+$/.test(trimmed)) return true;
+  return false;
+}
+
+module.exports = { normalizeName, normalizePhone, escapeRegex, isPlaceholderName };

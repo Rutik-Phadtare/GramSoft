@@ -21,8 +21,10 @@ const globalSearch = asyncHandler(async (req, res) => {
   if (q) {
     const regex = { $regex: escapeRegex(q), $options: "i" };
     const [gps, persons, users] = await Promise.all([
-      GramPanchayat.find({ name: regex }).select("_id"),
-      Person.find({ name: regex }).select("_id"),
+      // Matches on either language - a GP/person with only an English name,
+      // only a Marathi name, or both, is found either way.
+      GramPanchayat.find({ $or: [{ name: regex }, { nameMr: regex }] }).select("_id"),
+      Person.find({ $or: [{ name: regex }, { nameMr: regex }] }).select("_id"),
       User.find({ name: regex }).select("_id"),
     ]);
     const gpIds = gps.map((g) => g._id);

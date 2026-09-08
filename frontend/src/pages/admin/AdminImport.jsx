@@ -6,10 +6,17 @@ import { useLanguage } from "../../context/LanguageContext";
 import PageHeader from "../../components/PageHeader";
 import Badge from "../../components/Badge";
 
-const EXPECTED_COLUMNS = [
-  "grampanchayat_name", "taluka", "district", "population", "number_of_households",
-  "is_using_software", "previous_software", "software_start_date",
-  "person_name", "designation", "phone", "email",
+const REQUIRED_COLUMNS = [
+  "grampanchayat_name OR grampanchayat_name_marathi",
+  "taluka OR taluka_marathi",
+  "district OR district_marathi",
+  "person_name OR person_name_marathi",
+  "designation OR designation_marathi",
+  "phone",
+];
+const OPTIONAL_COLUMNS = [
+  "population", "number_of_households", "is_using_software", "previous_software",
+  "software_start_date", "email",
 ];
 
 function resultTone(value) {
@@ -86,12 +93,29 @@ export default function AdminImport() {
 
         <details className="mt-4 text-xs text-ink-muted">
           <summary className="cursor-pointer font-medium">{t("expectedColumns")}</summary>
+          <p className="mt-2 font-semibold text-ink">Required on every row</p>
           <div className="flex flex-wrap gap-1.5 mt-2">
-            {EXPECTED_COLUMNS.map((c) => (
+            {REQUIRED_COLUMNS.map((c) => (
+              <code key={c} className="font-mono bg-signal-50 text-signal-700 rounded px-1.5 py-0.5">{c}</code>
+            ))}
+          </div>
+          <p className="mt-3">
+            English and Marathi columns can be provided together, or Marathi-only. For bilingual fields, at least one
+            of the two language columns must contain a value. When only Marathi is supplied, the importer keeps the
+            Marathi value in the existing canonical field as well, so the rest of the application continues to work.
+          </p>
+          <p className="mt-3 font-semibold text-ink">Optional</p>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {OPTIONAL_COLUMNS.map((c) => (
               <code key={c} className="font-mono bg-ink/5 rounded px-1.5 py-0.5">{c}</code>
             ))}
           </div>
-          <p className="mt-2">Column names are matched case-insensitively; only <code className="font-mono">grampanchayat_name</code> is required.</p>
+          <p className="mt-2">
+            Column names are matched case-insensitively. A row missing any required column is skipped (with
+            an error shown below) rather than failing the whole import. The same <code className="font-mono">person_name</code>/
+            <code className="font-mono">person_name_marathi</code>/<code className="font-mono">phone</code> can appear on multiple rows against different Grampanchayats -
+            that's expected when one person is posted to more than one place, and won't create a duplicate contact.
+          </p>
         </details>
       </div>
 

@@ -62,7 +62,13 @@ const listGramPanchayats = asyncHandler(async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query, { defaultLimit: 50, maxLimit: 100 });
 
   const filter = {};
-  if (q) filter.nameKey = { $regex: `^${escapeRegex(normalizeName(q))}` };
+  // Matches on the normalized English key (as before) or the raw Marathi
+  // name, prefix-anchored the same way, so searching in Marathi returns the
+  // same GPs that searching in English already did.
+  if (q) {
+    const qRegex = { $regex: `^${escapeRegex(normalizeName(q))}`, $options: "i" };
+    filter.$or = [{ nameKey: qRegex }, { nameMr: qRegex }];
+  }
   if (taluka) filter.taluka = taluka;
   if (district) filter.district = district;
   if (softwareUsageStatus) filter.softwareUsageStatus = softwareUsageStatus;
@@ -104,7 +110,7 @@ const getRateDefaults = asyncHandler(async (req, res) => {
 // POST /api/grampanchayats - admin only
 const createGramPanchayat = asyncHandler(async (req, res) => {
   const {
-    name, nameMr, taluka, district, pincode, officePhone, officeEmail, population, numberOfHouseholds,
+    name, nameMr, taluka, talukaMr, district, districtMr, pincode, officePhone, officeEmail, population, numberOfHouseholds,
     mukamPost, gpType, waterSupplyMode, reassessmentYearFrom, reassessmentYearTo,
     isUsingOurSoftware, previousSoftwareUsed, softwareStartDate,
     subscriptionEndDate, subscriptionYears, priceAmount, paymentMode, status,
@@ -128,7 +134,9 @@ const createGramPanchayat = asyncHandler(async (req, res) => {
     nameMr,
     nameKey,
     taluka: taluka.trim(),
+    talukaMr,
     district: district.trim(),
+    districtMr,
     pincode,
     officePhone,
     officeEmail,
@@ -168,7 +176,7 @@ const getGramPanchayat = asyncHandler(async (req, res) => {
 
   const assignments = await PersonAssignment.find({ gramPanchayatId: req.params.id })
     .sort({ fromDate: -1 })
-    .populate("personId", "name nameMr designation phone email");
+    .populate("personId", "name nameMr designation designationMr phone email");
 
   const activity = await ActivityLog.find({ gramPanchayatId: req.params.id })
     .sort({ date: -1 })
@@ -196,7 +204,7 @@ const getGramPanchayatHistory = asyncHandler(async (req, res) => {
 // PATCH /api/grampanchayats/:id - admin only
 const updateGramPanchayat = asyncHandler(async (req, res) => {
   const allowed = [
-    "name", "nameMr", "taluka", "district", "pincode", "officePhone", "officeEmail",
+    "name", "nameMr", "taluka", "talukaMr", "district", "districtMr", "pincode", "officePhone", "officeEmail",
     "population", "numberOfHouseholds",
     "mukamPost", "gpType", "waterSupplyMode", "reassessmentYearFrom", "reassessmentYearTo",
     "taxRates", "constructionRates", "landRates",
@@ -269,7 +277,7 @@ const deleteGramPanchayat = asyncHandler(async (req, res) => {
  * POST /api/grampanchayats/:id/contacts - admin only
  */
 const addContact = asyncHandler(async (req, res) => {
-  const { personId, name, nameMr, designation, phone, email, confirmReplace } = req.body;
+  const { personId, name, nameMr, designation, designationMr, phone, email, confirmReplace } = req.body;
   const gramPanchayatId = req.params.id;
 
   const gp = await GramPanchayat.findById(gramPanchayatId);
@@ -295,6 +303,7 @@ const addContact = asyncHandler(async (req, res) => {
       nameMr,
       nameKey: normalizeName(name),
       designation,
+      designationMr,
       phone: normalizedPhone,
       email,
       district: gp.district,
@@ -334,7 +343,7 @@ const addContact = asyncHandler(async (req, res) => {
     fromDate: new Date(),
     toDate: null,
   });
-  await assignment.populate("personId", "name nameMr designation phone email");
+  await assignment.populate("personId", "name nameMr designation designationMr phone email");
 
   emitToAdmins("person:transferred", { personId: person._id, assignment });
   if (conflict) emitToAdmins("person:updated", { _id: conflict.personId?._id });
@@ -347,7 +356,10 @@ const addContact = asyncHandler(async (req, res) => {
 const exportGramPanchayats = asyncHandler(async (req, res) => {
   const { q, taluka, district, softwareUsageStatus } = req.query;
   const filter = {};
-  if (q) filter.nameKey = { $regex: `^${escapeRegex(normalizeName(q))}` };
+  if (q) {
+    const qRegex = { $regex: `^${escapeRegex(normalizeName(q))}`, $options: "i" };
+    filter.$or = [{ nameKey: qRegex }, { nameMr: qRegex }];
+  }
   if (taluka) filter.taluka = taluka;
   if (district) filter.district = district;
   if (softwareUsageStatus) filter.softwareUsageStatus = softwareUsageStatus;
@@ -355,14 +367,15 @@ const exportGramPanchayats = asyncHandler(async (req, res) => {
   const results = await GramPanchayat.find(filter).sort({ name: 1 }).limit(20000).lean();
 
   const header = [
-    "grampanchayat_name", "grampanchayat_name_marathi", "mukam_post", "taluka", "district", "pincode",
+    "grampanchayat_name", "grampanchayat_name_marathi", "mukam_post", "taluka", "taluka_marathi",
+    "district", "district_marathi", "pincode",
     "population", "number_of_households", "office_phone", "office_email", "gp_type", "water_supply_mode",
     "software_status", "software_start_date", "subscription_end_date", "subscription_years", "price_amount", "payment_mode",
   ];
   const csvEscape = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const rows = results.map((gp) =>
     [
-      gp.name, gp.nameMr, gp.mukamPost, gp.taluka, gp.district, gp.pincode,
+      gp.name, gp.nameMr, gp.mukamPost, gp.taluka, gp.talukaMr, gp.district, gp.districtMr, gp.pincode,
       gp.population, gp.numberOfHouseholds, gp.officePhone, gp.officeEmail, gp.gpType, gp.waterSupplyMode,
       gp.softwareUsageStatus, gp.softwareStartDate?.toISOString().slice(0, 10), gp.subscriptionEndDate?.toISOString().slice(0, 10),
       gp.subscriptionYears, gp.priceAmount, gp.paymentMode,

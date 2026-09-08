@@ -12,10 +12,10 @@ const { logFieldChanges } = require("../utils/diffFields");
 const { findHolderConflict, replaceHolder } = require("../utils/singleHolderGuard");
 const { createAdminNotification } = require("./notificationController");
 
-const PERSON_EDITABLE_FIELDS = ["name", "nameMr", "designation", "phone", "email", "address", "addressMr", "district", "notes"];
+const PERSON_EDITABLE_FIELDS = ["name", "nameMr", "designation", "designationMr", "phone", "email", "address", "addressMr", "district", "notes"];
 const GENERAL_EDITABLE_FIELDS = ["category", "targetArea", "title", "details", "requestedOutcome", "urgency", "page", "referenceId", "metadata"];
 const GP_EDITABLE_FIELDS = [
-  "name", "nameMr", "mukamPost", "taluka", "district", "pincode",
+  "name", "nameMr", "mukamPost", "taluka", "talukaMr", "district", "districtMr", "pincode",
   "officePhone", "officeEmail", "population", "numberOfHouseholds", "gpType", "waterSupplyMode",
   "reassessmentYearFrom", "reassessmentYearTo", "taxRates",
   "constructionRates", "landRates", "customFields",

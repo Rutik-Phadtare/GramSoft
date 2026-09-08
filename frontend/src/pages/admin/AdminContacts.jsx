@@ -17,7 +17,7 @@ import EmptyState from "../../components/EmptyState";
 import { SkeletonRows } from "../../components/Skeleton";
 import { softwareStatusLabel } from "../../utils/format";
 
-const emptyForm = { name: "", nameMr: "", designation: "Talathi", phone: "", email: "", address: "", addressMr: "", district: "" };
+const emptyForm = { name: "", nameMr: "", designation: "Talathi", designationMr: "", phone: "", email: "", address: "", addressMr: "", district: "" };
 const PAGE_SIZE = 25;
 
 export default function AdminContacts() {
@@ -203,6 +203,7 @@ export default function AdminContacts() {
               {DESIGNATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
+          <div><label className="field-label">{t("designationMarathi")}</label><input className="field-input" value={form.designationMr} onChange={(e) => setForm((f) => ({ ...f, designationMr: e.target.value }))} /></div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div><label className="field-label">{t("phone")}</label><input className="field-input" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
             <div><label className="field-label">{t("district")}</label><input className="field-input" value={form.district} onChange={(e) => setForm((f) => ({ ...f, district: e.target.value }))} /></div>
