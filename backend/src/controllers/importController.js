@@ -8,12 +8,15 @@ const { isPlaceholderName } = require("../utils/normalize");
 // Expected columns in the uploaded sheet (header names are matched
 // case-insensitively, spaces/underscores interchangeable):
 //
-//   Required on every row:
-//     taluka, taluka_marathi, district, district_marathi,
-//     designation, designation_marathi, phone
-//   Required, but bilingual - at least one of each pair must be a real name:
+//   Required for every GramPanchayat:
+//     taluka OR taluka_marathi
+//     district OR district_marathi
+//   Required, but bilingual - at least one language must be supplied:
 //     grampanchayat_name / grampanchayat_name_marathi
+//   Optional contact/person data:
 //     person_name / person_name_marathi
+//     designation / designation_marathi
+//     phone, email
 //   Optional:
 //     population, number_of_households, is_using_software, previous_software,
 //     software_start_date, email
@@ -25,9 +28,10 @@ const { isPlaceholderName } = require("../utils/normalize");
 // real name in either language (see isPlaceholderName) - it's the same as
 // that column being blank.
 //
-// One row = one Grampanchayat + one contact person at it. A row missing any
-// required field is skipped (with an explanatory error) rather than failing
-// the whole import, so one bad row doesn't block the rest of the sheet.
+// One row always imports the GramPanchayat when its master data is valid.
+// Contact/person data is optional enrichment. A row with GP + taluka + district
+// but no person is valid and creates/matches only the GramPanchayat. A row
+// missing a required GP master field is skipped without blocking the rest.
 //
 // The same person_name (and phone) can legitimately appear on multiple rows
 // against different Grampanchayats - one person can be posted to more than
@@ -56,10 +60,35 @@ function parseBoolean(value) {
   return ["yes", "true", "y", "1"].includes(value.trim().toLowerCase());
 }
 
-function parseDesignation(value) {
-  if (!value) return "Other";
-  const match = VALID_DESIGNATIONS.find((d) => d.toLowerCase() === value.trim().toLowerCase());
-  return match ?? "Other";
+const DESIGNATION_ALIASES_MR = new Map([
+  ["तलाठी", "Talathi"],
+  ["ग्रामसेवक", "Gramsevak"],
+  ["ग्राम सेवक", "Gramsevak"],
+  ["सरपंच", "Sarpanch"],
+  ["सचिव", "Sachiv"],
+  ["ग्रामपंचायत सचिव", "Sachiv"],
+  ["संगणक कर्मचारी", "Computer Operator"],
+  ["संगणक ऑपरेटर", "Computer Operator"],
+  ["कॉम्प्युटर ऑपरेटर", "Computer Operator"],
+]);
+
+function parseDesignation(englishValue, marathiValue) {
+  if (englishValue) {
+    const normalized = englishValue.trim().toLowerCase();
+    const exact = VALID_DESIGNATIONS.find(
+      (d) => d.toLowerCase() === normalized
+    );
+    if (exact) return exact;
+  }
+
+  if (marathiValue) {
+    const mapped = DESIGNATION_ALIASES_MR.get(
+      marathiValue.trim()
+    );
+    if (mapped) return mapped;
+  }
+
+  return "Other";
 }
 
 // Reads every mandatory column for a row and reports back which (if any)
@@ -81,28 +110,14 @@ function readRequiredFields(row) {
   values.designationMr = getField(row, "designation_marathi", "role_marathi");
   values.phone = getField(row, "phone", "mobile", "contact_number");
 
-  // A leftover placeholder ("_", "-", "N/A", ...) is never a real name in
-  // either language - treat it exactly like the column being blank, both so
-  // it can't satisfy the "at least one language" check below and so it
-  // never becomes part of a dedupe key (see upsertGramPanchayatAndPerson.js).
   if (isPlaceholderName(values.gpName)) values.gpName = undefined;
   if (isPlaceholderName(values.gpNameMr)) values.gpNameMr = undefined;
   if (isPlaceholderName(values.personName)) values.personName = undefined;
   if (isPlaceholderName(values.personNameMr)) values.personNameMr = undefined;
 
-  // grampanchayat_name and person_name are each optional as long as their
-  // Marathi counterpart is a real name - but at least one language is still
-  // required for each, so Marathi-only rows work while fully-blank rows
-  // still get skipped with a clear error.
   if (!values.gpName && !values.gpNameMr) missing.push("grampanchayat_name or grampanchayat_name_marathi");
-  if (!values.taluka) missing.push("taluka");
-  if (!values.talukaMr) missing.push("taluka_marathi");
-  if (!values.district) missing.push("district");
-  if (!values.districtMr) missing.push("district_marathi");
-  if (!values.personName && !values.personNameMr) missing.push("person_name or person_name_marathi");
-  if (!values.designation) missing.push("designation");
-  if (!values.designationMr) missing.push("designation_marathi");
-  if (!values.phone) missing.push("phone");
+  if (!values.taluka && !values.talukaMr) missing.push("taluka or taluka_marathi");
+  if (!values.district && !values.districtMr) missing.push("district or district_marathi");
 
   return { values, missing };
 }
@@ -125,11 +140,12 @@ const importSpreadsheet = asyncHandler(async (req, res) => {
   let assignmentsCreated = 0;
 
   for (let i = 0; i < rows.length; i++) {
-    const rowNum = i + 2; // account for header row, 1-indexed sheet rows
+    const rowNum = i + 2;
     const row = rows[i];
 
     try {
       const { values: f, missing } = readRequiredFields(row);
+
       if (missing.length) {
         results.push({
           row: rowNum,
@@ -144,20 +160,33 @@ const importSpreadsheet = asyncHandler(async (req, res) => {
       const result = await upsertGramPanchayatAndPerson({
         gramPanchayatName: f.gpName,
         gramPanchayatNameMr: f.gpNameMr,
-        taluka: f.taluka,
+        taluka: f.taluka || f.talukaMr,
         talukaMr: f.talukaMr,
-        district: f.district,
+        district: f.district || f.districtMr,
         districtMr: f.districtMr,
-        population: getField(row, "population") ? Number(getField(row, "population")) : undefined,
+        population: getField(row, "population")
+          ? Number(getField(row, "population"))
+          : undefined,
         numberOfHouseholds: getField(row, "number_of_households", "households")
           ? Number(getField(row, "number_of_households", "households"))
           : undefined,
-        isUsingOurSoftware: parseBoolean(getField(row, "is_using_software", "using_software")),
-        previousSoftwareUsed: getField(row, "previous_software", "previous_software_used"),
-        softwareStartDate: getField(row, "software_start_date") ? new Date(getField(row, "software_start_date")) : undefined,
+        isUsingOurSoftware: parseBoolean(
+          getField(row, "is_using_software", "using_software")
+        ),
+        previousSoftwareUsed: getField(
+          row,
+          "previous_software",
+          "previous_software_used"
+        ),
+        softwareStartDate: getField(row, "software_start_date")
+          ? new Date(getField(row, "software_start_date"))
+          : undefined,
         personName: f.personName,
         personNameMr: f.personNameMr,
-        designation: parseDesignation(f.designation),
+        designation:
+          f.personName || f.personNameMr
+            ? parseDesignation(f.designation, f.designationMr)
+            : undefined,
         designationMr: f.designationMr,
         phone: f.phone,
         email: getField(row, "email"),
@@ -165,31 +194,65 @@ const importSpreadsheet = asyncHandler(async (req, res) => {
         changedBy: req.user?.id,
       });
 
-      result.gramPanchayatWasNew ? gramPanchayatsCreated++ : gramPanchayatsMatched++;
+      result.gramPanchayatWasNew
+        ? gramPanchayatsCreated++
+        : gramPanchayatsMatched++;
+
       if (result.personId) {
-        result.personWasNew ? personsCreated++ : personsMatched++;
+        result.personWasNew
+          ? personsCreated++
+          : personsMatched++;
       }
-      if (result.assignmentWasNew) assignmentsCreated++;
+
+      if (result.assignmentWasNew) {
+        assignmentsCreated++;
+      }
 
       results.push({
         row: rowNum,
         gramPanchayat: result.gramPanchayatWasNew ? "created" : "matched",
-        person: result.personId ? (result.personWasNew ? "created" : "matched") : "skipped",
+        person: result.personId
+          ? result.personWasNew
+            ? "created"
+            : "matched"
+          : "skipped",
         assignment: result.personId
-          ? (result.assignmentWasNew
-              ? (result.assignmentWasReplacement ? "replaced" : "created")
-              : "already_current")
+          ? result.assignmentWasNew
+            ? result.assignmentWasReplacement
+              ? "replaced"
+              : "created"
+            : "already_current"
           : "skipped",
       });
     } catch (err) {
-      results.push({ row: rowNum, gramPanchayat: "skipped", person: "skipped", assignment: "skipped", error: err.message ?? "Unknown error" });
+      results.push({
+        row: rowNum,
+        gramPanchayat: "skipped",
+        person: "skipped",
+        assignment: "skipped",
+        error: err.message ?? "Unknown error",
+      });
     }
   }
 
-  const summary = { gramPanchayatsCreated, gramPanchayatsMatched, personsCreated, personsMatched, assignmentsCreated };
-  emitToAdmins("import:completed", { totalRows: rows.length, summary });
+  const summary = {
+    gramPanchayatsCreated,
+    gramPanchayatsMatched,
+    personsCreated,
+    personsMatched,
+    assignmentsCreated,
+  };
 
-  return res.json({ totalRows: rows.length, summary, rows: results });
+  emitToAdmins("import:completed", {
+    totalRows: rows.length,
+    summary,
+  });
+
+  return res.json({
+    totalRows: rows.length,
+    summary,
+    rows: results,
+  });
 });
 
 module.exports = { importSpreadsheet };
