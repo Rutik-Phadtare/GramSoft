@@ -8,6 +8,8 @@ import Badge from "../../components/Badge";
 import EmptyState from "../../components/EmptyState";
 import { SkeletonRows } from "../../components/Skeleton";
 import { formatDate } from "../../utils/format";
+import { displayName } from "../../utils/i18nData";
+import { useLanguage } from "../../context/LanguageContext";
 
 const STATUS_TONE = { pending: "outline", in_progress: "accent", completed: "brand", cancelled: "signal" };
 const STATUS_LABEL = { pending: "Pending", in_progress: "In progress", completed: "Completed", cancelled: "Cancelled" };
@@ -15,6 +17,7 @@ const NEXT_STATUS = { pending: "in_progress", in_progress: "completed" };
 const NEXT_LABEL = { pending: "Start", in_progress: "Mark complete" };
 
 export default function EmployeeTasks() {
+  const { language } = useLanguage();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
@@ -112,8 +115,8 @@ export default function EmployeeTasks() {
               </div>
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-muted ml-[42px] mb-3">
-                {task.gramPanchayatId?.name && (
-                  <span className="inline-flex items-center gap-1"><Landmark className="h-3 w-3" /> {task.gramPanchayatId.name}</span>
+                {displayName(task.gramPanchayatId, language).primary && (
+                  <span className="inline-flex items-center gap-1"><Landmark className="h-3 w-3" /> {displayName(task.gramPanchayatId, language).primary}</span>
                 )}
                 {task.dueDate && (
                   <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Due {formatDate(task.dueDate)}</span>

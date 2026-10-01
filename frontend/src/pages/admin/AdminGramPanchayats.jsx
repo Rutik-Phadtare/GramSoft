@@ -6,6 +6,9 @@ import { apiErrorMessage } from "../../api/client";
 import { useSocketEvent } from "../../context/SocketContext";
 import { useLanguage } from "../../context/LanguageContext";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { useGeoOptions, invalidateGeoOptions } from "../../hooks/useGeoOptions";
+import { useLatestRequest } from "../../hooks/useLatestRequest";
+import { displayName, placeLine } from "../../utils/i18nData";
 import PageHeader from "../../components/PageHeader";
 import SearchInput from "../../components/SearchInput";
 import Badge, { softwareStatusTone } from "../../components/Badge";
@@ -26,7 +29,7 @@ const emptyForm = {
 };
 
 export default function AdminGramPanchayats() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [query, setQuery] = useState("");
   const [district, setDistrict] = useState("");
   const [taluka, setTaluka] = useState("");
@@ -35,15 +38,17 @@ export default function AdminGramPanchayats() {
   const [page, setPage] = useState(1);
   const [results, setResults] = useState([]);
   const [pagination, setPagination] = useState(null);
-  const [districts, setDistricts] = useState([]);
-  const [talukas, setTalukas] = useState([]);
+  const runLatest = useLatestRequest();
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const debouncedQuery = useDebouncedValue(query, 300);
+  const debouncedQuery = useDebouncedValue(query, 250);
+  // `district` / `taluka` hold language-independent keys, so a selection
+  // survives switching English <-> Marathi (only the labels change).
+  const { districts, talukas } = useGeoOptions(district);
 
   const SOFTWARE_STATUS_OPTIONS = [
     { value: "", label: t("anySoftwareStatus") }, { value: "active", label: t("activeUsers") },
@@ -66,25 +71,30 @@ export default function AdminGramPanchayats() {
 
   function refresh() {
     setLoading(true);
-    gramPanchayatApi
-      .list({ q: debouncedQuery, taluka, district, softwareUsageStatus, sort, page, limit: PAGE_SIZE })
-      .then((data) => { setResults(data.results); setPagination(data.pagination); })
-      .finally(() => setLoading(false));
+    runLatest((signal) =>
+      gramPanchayatApi.list(
+        { q: debouncedQuery || undefined, taluka: taluka || undefined, district: district || undefined, softwareUsageStatus: softwareUsageStatus || undefined, sort: sort || undefined, page, limit: PAGE_SIZE },
+        { signal }
+      )
+    )
+      .then((data) => {
+        if (!data) return; // superseded by a newer request
+        setResults(data.results);
+        setPagination(data.pagination);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }
 
   useEffect(refresh, [debouncedQuery, taluka, district, softwareUsageStatus, sort, page]);
-  useEffect(() => { gramPanchayatApi.filterOptions().then((d) => setDistricts(d.districts)); }, []);
-  // Talukas scope to whichever district is selected - so "Satara" only
-  // ever offers Satara's own talukas, not every taluka in Maharashtra.
-  useEffect(() => { gramPanchayatApi.filterOptions(district).then((d) => setTalukas(d.talukas)); }, [district]);
-  useSocketEvent("gramPanchayat:new", refresh);
-  useSocketEvent("gramPanchayat:updated", refresh);
+  useSocketEvent("gramPanchayat:new", () => { invalidateGeoOptions(); refresh(); });
+  useSocketEvent("gramPanchayat:updated", () => { invalidateGeoOptions(); refresh(); });
 
   async function handleCreate(e) {
     e.preventDefault();
     setError("");
-    if (!form.name || !form.taluka || !form.district) {
-      setError("Name, taluka, and district are required.");
+    if ((!form.name && !form.nameMr) || (!form.taluka && !form.talukaMr) || (!form.district && !form.districtMr)) {
+      setError("Name, taluka, and district are required (English or Marathi).");
       return;
     }
     setSubmitting(true);
@@ -147,11 +157,11 @@ export default function AdminGramPanchayats() {
           </select>
           <select className="field-input w-auto text-sm py-1.5" value={district} onChange={(e) => handleDistrictChange(e.target.value)}>
             <option value="">{t("allDistricts")}</option>
-            {districts.map((d) => <option key={d} value={d}>{d}</option>)}
+            {districts.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
           </select>
           <select className="field-input w-auto text-sm py-1.5" value={taluka} onChange={(e) => handleTalukaChange(e.target.value)}>
             <option value="">{t("allTalukas")}</option>
-            {talukas.map((tk) => <option key={tk} value={tk}>{tk}</option>)}
+            {talukas.map((tk) => <option key={tk.value} value={tk.value}>{tk.label}</option>)}
           </select>
           <select className="field-input w-auto text-sm py-1.5" value={sort} onChange={(e) => handleSortChange(e.target.value)}>
             {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -167,12 +177,14 @@ export default function AdminGramPanchayats() {
           <EmptyState title={t("noGrampanchayatsFound")} hint={t("addOneOrImport")} />
         ) : (
           <ul className="divide-y divide-line">
-            {results.map((gp) => (
+            {results.map((gp) => {
+              const { primary, secondary } = displayName(gp, language);
+              return (
               <li key={gp._id}>
                 <Link to={`/admin/grampanchayats/${gp._id}`} className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-canvas/60 transition-colors">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-ink truncate">{gp.name}{gp.nameMr ? ` · ${gp.nameMr}` : ""}</p>
-                    <p className="text-xs text-ink-muted truncate">{gp.taluka}, {gp.district}</p>
+                    <p className="text-sm font-medium text-ink truncate">{primary}{secondary ? <span className="text-ink-muted font-normal"> · {secondary}</span> : null}</p>
+                    <p className="text-xs text-ink-muted truncate">{placeLine(gp, language)}</p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <Badge tone={softwareStatusTone(gp.softwareUsageStatus)}>{softwareStatusLabel(gp.softwareUsageStatus)}</Badge>
@@ -182,7 +194,8 @@ export default function AdminGramPanchayats() {
                   </div>
                 </Link>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
         <Pagination pagination={pagination} onPageChange={setPage} />

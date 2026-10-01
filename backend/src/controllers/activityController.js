@@ -10,6 +10,7 @@ const { emitToAdmins, emitToUser } = require("../sockets");
 const { parsePagination, buildPaginationMeta } = require("../utils/paginate");
 const { validateDynamicFieldValues } = require("../utils/dynamicFields");
 const { createAdminNotification } = require("./notificationController");
+const { sendCsv } = require("../utils/sendCsv");
 
 // No update/edit endpoint exists on purpose - activity entries are
 // append-only. A correction is a new entry, not an edit to an old one.
@@ -167,7 +168,7 @@ const listActivities = asyncHandler(async (req, res) => {
       .skip(skip)
       .limit(limit)
       .populate("employeeId", "name")
-      .populate("gramPanchayatId", "name taluka")
+      .populate("gramPanchayatId", "name nameMr taluka talukaMr")
       .populate("personId", "name designation"),
     ActivityLog.countDocuments(filter),
   ]);
@@ -214,7 +215,7 @@ const exportActivities = asyncHandler(async (req, res) => {
     .sort({ date: -1 })
     .limit(20000)
     .populate("employeeId", "name")
-    .populate("gramPanchayatId", "name taluka district")
+    .populate("gramPanchayatId", "name nameMr taluka talukaMr district districtMr")
     .populate("personId", "name designation phone");
 
   // Dynamic columns: every Admin-configured Activity field (global + all
@@ -262,9 +263,7 @@ const exportActivities = asyncHandler(async (req, res) => {
 
   const csv = [header.join(","), ...rows].join("\n");
 
-  res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", `attachment; filename="gramsoft-activity-${new Date().toISOString().slice(0, 10)}.csv"`);
-  return res.send(csv);
+  return sendCsv(res, `gramsoft-activity-${new Date().toISOString().slice(0, 10)}.csv`, csv);
 });
 
 module.exports = { createActivity, listActivities, exportActivities };

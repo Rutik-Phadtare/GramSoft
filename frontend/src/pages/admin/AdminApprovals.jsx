@@ -13,6 +13,7 @@ import Pagination from "../../components/Pagination";
 import EmptyState from "../../components/EmptyState";
 import { SkeletonRows } from "../../components/Skeleton";
 import { formatDateTime } from "../../utils/format";
+import { displayName, talukaLabel } from "../../utils/i18nData";
 
 const PAGE_SIZE = 20;
 
@@ -45,7 +46,7 @@ function prepareEditPayload(form, original) {
 }
 
 export default function AdminApprovals() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const TABS = [
     { key: "pending", label: t("pending") }, { key: "approved", label: t("approved") }, { key: "rejected", label: t("rejected") },
   ];
@@ -194,8 +195,8 @@ export default function AdminApprovals() {
                     </p>
                     {r.gramPanchayatId && r.entityType === "Person" && (
                       <p className="text-xs text-ink-muted mt-0.5">
-                        Grampanchayat: <span className="font-medium text-ink-soft">{r.gramPanchayatId.name}</span>
-                        {r.gramPanchayatId.taluka && `, ${r.gramPanchayatId.taluka}`}
+                        Grampanchayat: <span className="font-medium text-ink-soft">{displayName(r.gramPanchayatId, language).primary}</span>
+                        {talukaLabel(r.gramPanchayatId, language) && `, ${talukaLabel(r.gramPanchayatId, language)}`}
                       </p>
                     )}
                   </div>

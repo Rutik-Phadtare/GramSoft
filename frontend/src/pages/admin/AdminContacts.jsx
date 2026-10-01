@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Plus, SlidersHorizontal, Download } from "lucide-react";
 import { personApi } from "../../api/persons";
-import { gramPanchayatApi } from "../../api/gramPanchayats";
 import { apiErrorMessage } from "../../api/client";
 import { useSocketEvent } from "../../context/SocketContext";
 import { useLanguage } from "../../context/LanguageContext";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
-import { DESIGNATIONS } from "../../utils/constants";
+import { useGeoOptions } from "../../hooks/useGeoOptions";
+import { useLatestRequest } from "../../hooks/useLatestRequest";
+import { displayName, workplaceLine } from "../../utils/i18nData";
+import { DESIGNATIONS, designationTranslationKey } from "../../utils/constants";
 import PageHeader from "../../components/PageHeader";
 import SearchInput from "../../components/SearchInput";
 import Badge, { designationTone, softwareStatusTone } from "../../components/Badge";
@@ -21,7 +23,7 @@ const emptyForm = { name: "", nameMr: "", designation: "Talathi", designationMr:
 const PAGE_SIZE = 25;
 
 export default function AdminContacts() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [query, setQuery] = useState("");
   const [designation, setDesignation] = useState("");
   const [district, setDistrict] = useState("");
@@ -31,15 +33,17 @@ export default function AdminContacts() {
   const [page, setPage] = useState(1);
   const [results, setResults] = useState([]);
   const [pagination, setPagination] = useState(null);
-  const [personDistricts, setPersonDistricts] = useState([]);
-  const [talukas, setTalukas] = useState([]);
+  const runLatest = useLatestRequest();
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const debouncedQuery = useDebouncedValue(query, 300);
+  const debouncedQuery = useDebouncedValue(query, 250);
+  // Same bilingual district/taluka options as the Grampanchayat directory. A
+  // contact has no taluka of its own - it's where their current GP is.
+  const { districts: personDistricts, talukas } = useGeoOptions(district);
 
   const SOFTWARE_STATUS_OPTIONS = [
     { value: "", label: t("anySoftwareStatus") }, { value: "active", label: t("postedAtActiveGp") },
@@ -62,18 +66,22 @@ export default function AdminContacts() {
 
   function refresh() {
     setLoading(true);
-    personApi
-      .list({ q: debouncedQuery, withHistory: true, designation, district, taluka, softwareUsageStatus, sort, page, limit: PAGE_SIZE })
-      .then((data) => { setResults(data.results); setPagination(data.pagination); })
-      .finally(() => setLoading(false));
+    runLatest((signal) =>
+      personApi.list(
+        { q: debouncedQuery || undefined, withHistory: true, designation: designation || undefined, district: district || undefined, taluka: taluka || undefined, softwareUsageStatus: softwareUsageStatus || undefined, sort: sort || undefined, page, limit: PAGE_SIZE },
+        { signal }
+      )
+    )
+      .then((data) => {
+        if (!data) return; // superseded by a newer request
+        setResults(data.results);
+        setPagination(data.pagination);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }
 
   useEffect(refresh, [debouncedQuery, designation, district, taluka, softwareUsageStatus, sort, page]);
-  useEffect(() => { personApi.filterOptions().then((d) => setPersonDistricts(d.districts)); }, []);
-  // Talukas come from the Grampanchayat directory (a Person has no taluka of
-  // its own - it's a property of wherever they're currently posted), scoped
-  // to the selected district so the list only ever shows relevant talukas.
-  useEffect(() => { gramPanchayatApi.filterOptions(district).then((d) => setTalukas(d.talukas)); }, [district]);
   useSocketEvent("person:new", refresh);
   useSocketEvent("person:updated", refresh);
   useSocketEvent("person:transferred", refresh);
@@ -81,8 +89,8 @@ export default function AdminContacts() {
   async function handleCreate(e) {
     e.preventDefault();
     setError("");
-    if (!form.name) {
-      setError("Name is required.");
+    if (!form.name && !form.nameMr) {
+      setError("Name is required (English or Marathi).");
       return;
     }
     setSubmitting(true);
@@ -136,18 +144,18 @@ export default function AdminContacts() {
           <SlidersHorizontal className="h-3.5 w-3.5 text-ink-muted flex-shrink-0" />
           <select className="field-input w-auto text-sm py-1.5" value={designation} onChange={(e) => handleDesignationChange(e.target.value)}>
             <option value="">{t("allDesignations")}</option>
-            {DESIGNATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+            {DESIGNATIONS.map((d) => <option key={d} value={d}>{t(designationTranslationKey(d))}</option>)}
           </select>
           <select className="field-input w-auto text-sm py-1.5" value={softwareUsageStatus} onChange={(e) => handleSoftwareStatusChange(e.target.value)}>
             {SOFTWARE_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <select className="field-input w-auto text-sm py-1.5" value={district} onChange={(e) => handleDistrictChange(e.target.value)}>
             <option value="">{t("allDistricts")}</option>
-            {personDistricts.map((d) => <option key={d} value={d}>{d}</option>)}
+            {personDistricts.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
           </select>
           <select className="field-input w-auto text-sm py-1.5" value={taluka} onChange={(e) => handleTalukaChange(e.target.value)}>
             <option value="">{t("allTalukas")}</option>
-            {talukas.map((tk) => <option key={tk} value={tk}>{tk}</option>)}
+            {talukas.map((tk) => <option key={tk.value} value={tk.value}>{tk.label}</option>)}
           </select>
           <select className="field-input w-auto text-sm py-1.5" value={sort} onChange={(e) => handleSortChange(e.target.value)}>
             {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -165,13 +173,14 @@ export default function AdminContacts() {
           <ul className="divide-y divide-line">
             {results.map((p) => {
               const currentGp = p.currentPostings?.[0]?.gramPanchayatId;
+              const { primary, secondary } = displayName(p, language);
               return (
                 <li key={p._id}>
                   <Link to={`/admin/contacts/${p._id}`} className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-canvas/60 transition-colors">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-ink truncate">{p.name}{p.nameMr ? ` · ${p.nameMr}` : ""}</p>
+                      <p className="text-sm font-medium text-ink truncate">{primary}{secondary ? <span className="text-ink-muted font-normal"> · {secondary}</span> : null}</p>
                       <p className="text-xs text-ink-muted truncate">
-                        {p.phone || "No phone"} · {currentGp ? `${currentGp.name}, ${currentGp.taluka}` : "No current posting"}
+                        {p.phone || t("noPhone")} · {currentGp ? workplaceLine(currentGp, language) : t("noCurrentPosting")}
                         {p.totalGramPanchayatsHandled > 1 ? ` · ${p.totalGramPanchayatsHandled} GPs` : ""}
                       </p>
                     </div>
@@ -179,7 +188,7 @@ export default function AdminContacts() {
                       {currentGp?.softwareUsageStatus && (
                         <Badge tone={softwareStatusTone(currentGp.softwareUsageStatus)}>{softwareStatusLabel(currentGp.softwareUsageStatus)}</Badge>
                       )}
-                      <Badge tone={designationTone(p.designation)}>{p.designation}</Badge>
+                      <Badge tone={designationTone(p.designation)}>{t(designationTranslationKey(p.designation))}</Badge>
                     </div>
                   </Link>
                 </li>

@@ -15,6 +15,7 @@ import EntitySearchSelect from "../../components/EntitySearchSelect";
 import EmptyState from "../../components/EmptyState";
 import { SkeletonRows } from "../../components/Skeleton";
 import { formatDate, formatDateTime } from "../../utils/format";
+import { nameLine, placeLine, displayName } from "../../utils/i18nData";
 
 const STATUS_TABS = [
   { key: "", label: "All" },
@@ -26,7 +27,7 @@ const STATUS_TABS = [
 const TASK_STATUS_TONE = { pending: "outline", in_progress: "accent", completed: "brand", cancelled: "signal" };
 
 export default function AdminTasks() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [status, setStatus] = useState("");
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -135,9 +136,9 @@ export default function AdminTasks() {
                 </div>
                 {task.description && <p className="text-sm text-ink-soft mb-1">{task.description}</p>}
                 <div className="flex flex-wrap gap-3 text-xs text-ink-muted">
-                  {task.gramPanchayatId?.name && (
+                  {displayName(task.gramPanchayatId, language).primary && (
                     <Link to={`/admin/grampanchayats/${task.gramPanchayatId._id}`} className="hover:underline">
-                      {task.gramPanchayatId.name}
+                      {displayName(task.gramPanchayatId, language).primary}
                     </Link>
                   )}
                   {task.dueDate && <span>Due {formatDate(task.dueDate)}</span>}
@@ -179,8 +180,8 @@ export default function AdminTasks() {
             fetchResults={searchGramPanchayats}
             value={form.gramPanchayat}
             onChange={(gp) => setForm((f) => ({ ...f, gramPanchayat: gp }))}
-            renderOption={(gp) => <div><p className="text-sm font-medium text-ink">{gp.name}</p><p className="text-xs text-ink-muted">{gp.taluka}, {gp.district}</p></div>}
-            renderSelected={(gp) => <div><p className="text-sm font-medium text-ink">{gp.name}</p><p className="text-xs text-ink-muted">{gp.taluka}, {gp.district}</p></div>}
+            renderOption={(gp) => <div><p className="text-sm font-medium text-ink">{nameLine(gp, language)}</p><p className="text-xs text-ink-muted">{placeLine(gp, language)}</p></div>}
+            renderSelected={(gp) => <div><p className="text-sm font-medium text-ink">{nameLine(gp, language)}</p><p className="text-xs text-ink-muted">{placeLine(gp, language)}</p></div>}
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <div>

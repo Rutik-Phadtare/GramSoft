@@ -15,6 +15,7 @@ import EntitySearchSelect from "../../components/EntitySearchSelect";
 import DynamicFields from "../../components/DynamicFields";
 import Badge, { designationTone } from "../../components/Badge";
 import NewGramPanchayatRequest from "../../components/NewGramPanchayatRequest";
+import { nameLine, placeLine, displayName } from "../../utils/i18nData";
 
 // Business fields (what used to be the hard-coded "Problem & Solution" /
 // "Their response" blocks, plus duration/follow-up date) are no longer
@@ -31,7 +32,7 @@ const emptyContactDetails = { name: "", nameMr: "", phone: "", address: "", addr
 
 export default function ActivityNew() {
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [types, setTypes] = useState([]);
   const [customFieldDefs, setCustomFieldDefs] = useState([]);
   const [fieldsLoading, setFieldsLoading] = useState(false);
@@ -283,14 +284,14 @@ export default function ActivityNew() {
               emptyHint="No matching Grampanchayat found."
               renderOption={(gp) => (
                 <div>
-                  <p className="text-sm font-medium text-ink">{gp.name}</p>
-                  <p className="text-xs text-ink-muted">{gp.taluka}, {gp.district}</p>
+                  <p className="text-sm font-medium text-ink">{nameLine(gp, language)}</p>
+                  <p className="text-xs text-ink-muted">{placeLine(gp, language)}</p>
                 </div>
               )}
               renderSelected={(gp) => (
                 <div>
-                  <p className="text-sm font-medium text-ink">{gp.name}</p>
-                  <p className="text-xs text-ink-muted">{gp.taluka}, {gp.district}</p>
+                  <p className="text-sm font-medium text-ink">{nameLine(gp, language)}</p>
+                  <p className="text-xs text-ink-muted">{placeLine(gp, language)}</p>
                 </div>
               )}
             />
@@ -338,7 +339,7 @@ export default function ActivityNew() {
             fetchResults={searchPersons}
             value={person}
             onChange={selectPerson}
-            emptyHint={`No contacts on file for ${gramPanchayat.name} yet. Use "${t("suggestNewContact")}" below.`}
+            emptyHint={`No contacts on file for ${displayName(gramPanchayat, language).primary} yet. Use "${t("suggestNewContact")}" below.`}
             renderOption={(p) => (
               <div className="flex items-center justify-between gap-2">
                 <div>
@@ -386,7 +387,7 @@ export default function ActivityNew() {
           {contactDetailsOpen && (
             <div className="px-4 pb-4 space-y-3 border-t border-line pt-3">
               <p className="text-xs text-ink-muted -mt-1">
-                {!person && `${t("suggestForGp")} ${gramPanchayat.name}. `}
+                {!person && `${t("suggestForGp")} ${displayName(gramPanchayat, language).primary}. `}
                 {t("contactDetailsHint")}
               </p>
               <div className="grid gap-3 sm:grid-cols-2">

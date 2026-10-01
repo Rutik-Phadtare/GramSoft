@@ -7,6 +7,10 @@ import { apiErrorMessage } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useLanguage } from "../../context/LanguageContext";
+import { useGeoOptions } from "../../hooks/useGeoOptions";
+import { useLatestRequest } from "../../hooks/useLatestRequest";
+import { displayName, workplaceLine } from "../../utils/i18nData";
+import { designationTranslationKey } from "../../utils/constants";
 import PageHeader from "../../components/PageHeader";
 import SearchInput from "../../components/SearchInput";
 import Badge, { designationTone } from "../../components/Badge";
@@ -23,13 +27,17 @@ const emptyForm = {
 
 export default function EmployeeContacts() {
   const { user } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [query, setQuery] = useState("");
+  const [district, setDistrict] = useState("");
+  const [taluka, setTaluka] = useState("");
   const [page, setPage] = useState(1);
+  const runLatest = useLatestRequest();
+  const { districts, talukas } = useGeoOptions(district);
   const [results, setResults] = useState([]);
   const [pagination, setPagination] = useState(null);
   const [loading, setLoading] = useState(true);
-  const debouncedQuery = useDebouncedValue(query, 300);
+  const debouncedQuery = useDebouncedValue(query, 250);
 
   const [proposeTarget, setProposeTarget] = useState(null);
   const [proposeForm, setProposeForm] = useState(emptyForm);
@@ -46,11 +54,18 @@ export default function EmployeeContacts() {
       return;
     }
     setLoading(true);
-    personApi.list({ q: debouncedQuery || undefined, withHistory: true, page, limit: PAGE_SIZE })
-      .then((data) => { setResults(data.results); setPagination(data.pagination); })
-      .finally(() => setLoading(false));
+    runLatest((signal) =>
+      personApi.list({ q: debouncedQuery || undefined, district: district || undefined, taluka: taluka || undefined, withHistory: true, page, limit: PAGE_SIZE }, { signal })
+    )
+      .then((data) => {
+        if (!data) return;
+        setResults(data.results);
+        setPagination(data.pagination);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }
-  useEffect(refresh, [debouncedQuery, page, canView]);
+  useEffect(refresh, [debouncedQuery, district, taluka, page, canView]);
 
   function openPropose(person) {
     setProposeTarget(person);
@@ -101,7 +116,17 @@ export default function EmployeeContacts() {
       <PageHeader eyebrow="Directory" title={t("contacts")} description="Find people and see the Grampanchayat where they currently work." />
 
       <div className="card p-4 mb-4">
-        <SearchInput value={query} onChange={(v) => { setQuery(v); setPage(1); }} placeholder={t("search")} />
+        <SearchInput value={query} onChange={(v) => { setQuery(v); setPage(1); }} placeholder={t("searchByNamePhone")} />
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <select className="field-input w-auto text-sm py-1.5" value={district} onChange={(e) => { setDistrict(e.target.value); setTaluka(""); setPage(1); }}>
+            <option value="">{t("allDistricts")}</option>
+            {districts.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+          </select>
+          <select className="field-input w-auto text-sm py-1.5" value={taluka} onChange={(e) => { setTaluka(e.target.value); setPage(1); }}>
+            <option value="">{t("allTalukas")}</option>
+            {talukas.map((tk) => <option key={tk.value} value={tk.value}>{tk.label}</option>)}
+          </select>
+        </div>
       </div>
 
       <div className="card overflow-hidden">
@@ -111,21 +136,22 @@ export default function EmployeeContacts() {
           <ul className="divide-y divide-line">
             {results.map((p) => {
               const currentGps = p.currentPostings || [];
+              const { primary, secondary } = displayName(p, language);
               return (
                 <li key={p._id}>
                   <div className="flex items-start justify-between gap-3 px-5 py-3.5">
                     <Link to={`/contacts`} className="min-w-0 flex-1 hover:bg-canvas/50 rounded-lg -m-2 p-2">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="text-sm font-medium text-ink truncate">{p.name}{p.nameMr ? ` · ${p.nameMr}` : ""}</p>
-                        <Badge tone={designationTone(p.designation)}>{p.designation}</Badge>
+                        <p className="text-sm font-medium text-ink truncate">{primary}{secondary ? <span className="text-ink-muted font-normal"> · {secondary}</span> : null}</p>
+                        <Badge tone={designationTone(p.designation)}>{t(designationTranslationKey(p.designation))}</Badge>
                       </div>
-                      <p className="text-xs text-ink-muted truncate">{p.phone || "No phone"}{p.email ? ` · ${p.email}` : ""}</p>
+                      <p className="text-xs text-ink-muted truncate">{p.phone || t("noPhone")}{p.email ? ` · ${p.email}` : ""}</p>
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
                         {currentGps.length ? currentGps.map((a) => (
                           <span key={a._id} className="inline-flex items-center gap-1 text-xs text-ink-soft">
-                            <Landmark className="h-3 w-3" /> {a.gramPanchayatId?.name}{a.gramPanchayatId?.taluka ? `, ${a.gramPanchayatId.taluka}` : ""}
+                            <Landmark className="h-3 w-3" /> {workplaceLine(a.gramPanchayatId, language)}
                           </span>
-                        )) : <span className="text-xs text-ink-muted">No current workplace recorded</span>}
+                        )) : <span className="text-xs text-ink-muted">{t("noCurrentWorkplace")}</span>}
                       </div>
                     </Link>
                     {canPropose && <button type="button" onClick={() => openPropose(p)} className="btn btn-outline text-xs py-1.5"><Pencil className="h-3.5 w-3.5" /> Propose change</button>}

@@ -9,7 +9,9 @@ import { personApi } from "../../api/persons";
 import { useSocketEvent } from "../../context/SocketContext";
 import { useLanguage } from "../../context/LanguageContext";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
-import { DESIGNATIONS } from "../../utils/constants";
+import { useGeoOptions } from "../../hooks/useGeoOptions";
+import { displayName, placeLine, workplaceLine } from "../../utils/i18nData";
+import { DESIGNATIONS, designationTranslationKey } from "../../utils/constants";
 import PageHeader from "../../components/PageHeader";
 import SearchInput from "../../components/SearchInput";
 import Badge, {
@@ -36,7 +38,7 @@ const TABS = [
 ];
 
 export default function AdminExplorer() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [tab, setTab] = useState("activity");
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query, 300);
@@ -89,8 +91,6 @@ export default function AdminExplorer() {
   ];
 
   const [types, setTypes] = useState([]);
-  const [districts, setDistricts] = useState([]);
-  const [talukas, setTalukas] = useState([]);
   const [results, setResults] = useState([]);
   const [pagination, setPagination] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -111,7 +111,6 @@ export default function AdminExplorer() {
 
   useEffect(() => {
     activityTypeApi.list().then((data) => setTypes(data.types));
-    gramPanchayatApi.filterOptions().then((d) => setDistricts(d.districts));
   }, []);
 
   // Talukas are scoped to whichever district is currently selected on the
@@ -124,11 +123,9 @@ export default function AdminExplorer() {
         ? personFilters.district
         : "";
 
-  useEffect(() => {
-    gramPanchayatApi.filterOptions(activeDistrict).then((d) => {
-      setTalukas(d.talukas);
-    });
-  }, [activeDistrict]);
+  // Bilingual + cached; option values are language-independent keys, so a
+  // selected filter survives a language switch (only its label changes).
+  const { districts, talukas } = useGeoOptions(activeDistrict);
 
   const activityParams = useMemo(
     () => ({
@@ -408,8 +405,8 @@ export default function AdminExplorer() {
             >
               <option value="">{t("allDistricts")}</option>
               {districts.map((d) => (
-                <option key={d} value={d}>
-                  {d}
+                <option key={d.value} value={d.value}>
+                  {d.label}
                 </option>
               ))}
             </select>
@@ -423,8 +420,8 @@ export default function AdminExplorer() {
             >
               <option value="">{t("allTalukas")}</option>
               {talukas.map((tk) => (
-                <option key={tk} value={tk}>
-                  {tk}
+                <option key={tk.value} value={tk.value}>
+                  {tk.label}
                 </option>
               ))}
             </select>
@@ -488,8 +485,8 @@ export default function AdminExplorer() {
             >
               <option value="">{t("allDistricts")}</option>
               {districts.map((d) => (
-                <option key={d} value={d}>
-                  {d}
+                <option key={d.value} value={d.value}>
+                  {d.label}
                 </option>
               ))}
             </select>
@@ -503,8 +500,8 @@ export default function AdminExplorer() {
             >
               <option value="">{t("allTalukas")}</option>
               {talukas.map((tk) => (
-                <option key={tk} value={tk}>
-                  {tk}
+                <option key={tk.value} value={tk.value}>
+                  {tk.label}
                 </option>
               ))}
             </select>
@@ -546,11 +543,11 @@ export default function AdminExplorer() {
             hint={t("tryAdjustingFilters")}
           />
         ) : tab === "activity" ? (
-          <ActivityTable entries={results} t={t} />
+          <ActivityTable entries={results} t={t} language={language} />
         ) : tab === "grampanchayats" ? (
-          <GramPanchayatTable results={results} t={t} />
+          <GramPanchayatTable results={results} t={t} language={language} />
         ) : (
-          <ContactTable results={results} />
+          <ContactTable results={results} t={t} language={language} />
         )}
 
         <Pagination pagination={pagination} onPageChange={setPage} />
@@ -559,7 +556,7 @@ export default function AdminExplorer() {
   );
 }
 
-function ActivityTable({ entries, t }) {
+function ActivityTable({ entries, t, language }) {
   return (
     <div className="w-full overflow-x-auto">
       <table className="w-full min-w-[900px] text-sm">
@@ -622,12 +619,12 @@ function ActivityTable({ entries, t }) {
               </td>
 
               <td className="px-4 py-3 whitespace-nowrap text-ink-soft">
-                {entry.gramPanchayatId?.name ? (
+                {displayName(entry.gramPanchayatId, language).primary ? (
                   <Link
                     to={`/admin/grampanchayats/${entry.gramPanchayatId._id}`}
                     className="hover:underline"
                   >
-                    {entry.gramPanchayatId.name}
+                    {displayName(entry.gramPanchayatId, language).primary}
                   </Link>
                 ) : (
                   "—"
@@ -651,7 +648,7 @@ function ActivityTable({ entries, t }) {
   );
 }
 
-function GramPanchayatTable({ results, t }) {
+function GramPanchayatTable({ results, t, language }) {
   return (
     <ul className="divide-y divide-line">
       {results.map((gp) => (
@@ -669,12 +666,12 @@ function GramPanchayatTable({ results, t }) {
           >
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-ink break-words">
-                {gp.name}
-                {gp.nameMr ? ` · ${gp.nameMr}` : ""}
+                {displayName(gp, language).primary}
+                {displayName(gp, language).secondary ? ` · ${displayName(gp, language).secondary}` : ""}
               </p>
 
               <p className="text-xs text-ink-muted mt-0.5 break-words">
-                {gp.taluka}, {gp.district}
+                {placeLine(gp, language)}
               </p>
             </div>
 
@@ -702,7 +699,7 @@ function GramPanchayatTable({ results, t }) {
   );
 }
 
-function ContactTable({ results }) {
+function ContactTable({ results, t, language }) {
   return (
     <ul className="divide-y divide-line">
       {results.map((p) => {
@@ -723,16 +720,16 @@ function ContactTable({ results }) {
             >
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-ink break-words">
-                  {p.name}
-                  {p.nameMr ? ` · ${p.nameMr}` : ""}
+                  {displayName(p, language).primary}
+                  {displayName(p, language).secondary ? ` · ${displayName(p, language).secondary}` : ""}
                 </p>
 
                 <p className="text-xs text-ink-muted mt-0.5 break-words leading-5">
-                  {p.phone || "No phone"}
+                  {p.phone || t("noPhone")}
                   {" · "}
                   {currentGp
-                    ? `${currentGp.name}, ${currentGp.taluka}`
-                    : "No current posting"}
+                    ? workplaceLine(currentGp, language)
+                    : t("noCurrentPosting")}
                   {p.totalGramPanchayatsHandled > 1
                     ? ` · ${p.totalGramPanchayatsHandled} GPs`
                     : ""}
@@ -757,7 +754,7 @@ function ContactTable({ results }) {
                 )}
 
                 <Badge tone={designationTone(p.designation)}>
-                  {p.designation}
+                  {t(designationTranslationKey(p.designation))}
                 </Badge>
               </div>
             </Link>

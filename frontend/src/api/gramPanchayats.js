@@ -1,7 +1,7 @@
 import { api } from "./client";
 
 export const gramPanchayatApi = {
-  list: (params) => api.get("/grampanchayats", { params }).then((r) => r.data),
+  list: (params, config) => api.get("/grampanchayats", { params, ...config }).then((r) => r.data),
   filterOptions: (district) => api.get("/grampanchayats/filter-options", { params: { district } }).then((r) => r.data),
   async downloadCsv(params) {
     const response = await api.get("/grampanchayats/export", { params, responseType: "blob" });

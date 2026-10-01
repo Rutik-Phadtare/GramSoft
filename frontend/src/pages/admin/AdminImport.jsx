@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { UploadCloud, FileSpreadsheet } from "lucide-react";
+import { UploadCloud, FileSpreadsheet, AlertTriangle } from "lucide-react";
 import { importApi } from "../../api/importApi";
 import { apiErrorMessage } from "../../api/client";
 import { useLanguage } from "../../context/LanguageContext";
@@ -195,6 +195,17 @@ export default function AdminImport() {
           <h2 className="font-display text-sm font-semibold text-ink mb-3">
             {t("importSummary")}
           </h2>
+
+          {result.warnings?.length > 0 && (
+            <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 space-y-1.5">
+              {result.warnings.map((w) => (
+                <p key={w} className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>{w}</span>
+                </p>
+              ))}
+            </div>
+          )}
 
           <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
             <SummaryStat

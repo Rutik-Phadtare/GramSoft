@@ -42,6 +42,9 @@ const PersonSchema = new Schema(
     address: { type: String, trim: true },
     addressMr: { type: String, trim: true },
     district: { type: String, trim: true },
+    districtKey: { type: String }, // language-independent, see plugins/bilingual.js
+    searchKeys: { type: [String], select: false },
+    identityKeys: { type: [String], select: false },
     notes: { type: String, trim: true },
     lastContactedAt: { type: Date },
   },
@@ -53,6 +56,11 @@ const PersonSchema = new Schema(
 PersonSchema.index({ phone: 1 }, { unique: true, sparse: true });
 PersonSchema.index({ nameKey: 1, district: 1 });
 PersonSchema.index({ name: "text", nameMr: "text" });
+PersonSchema.index({ searchKeys: 1 });
+PersonSchema.index({ districtKey: 1, designation: 1 });
+PersonSchema.index({ districtKey: 1, identityKeys: 1 });
+
+PersonSchema.plugin(require("./plugins/bilingual"), { kind: "person" });
 
 const PersonModel = models.Person || model("Person", PersonSchema);
 PersonModel.DESIGNATIONS = DESIGNATIONS;

@@ -9,6 +9,12 @@ const { emitToAdmins } = require("../sockets");
 const { parsePagination, buildPaginationMeta } = require("../utils/paginate");
 const { logFieldChanges } = require("../utils/diffFields");
 const { findHolderConflict, replaceHolder } = require("../utils/singleHolderGuard");
+const { buildNameSearchClauses, deriveGp } = require("../utils/bilingual");
+const { keyFromParam, getGeoOptions, invalidateGeoOptionsCache } = require("../utils/geo");
+const { sendCsv } = require("../utils/sendCsv");
+
+// List rows never need the heavy per-GP rate tables or index arrays.
+const LIST_EXCLUDE = "-taxRates -constructionRates -landRates -customFields -searchKeys -identityKeys";
 
 // Kept in one place so "active" always means the same thing everywhere a
 // Grampanchayat's software status is read or filtered on.
@@ -37,63 +43,70 @@ function stripFinancials(doc) {
   return plain;
 }
 
+function listSelect(user) {
+  return canViewFinancials(user) ? LIST_EXCLUDE : `${LIST_EXCLUDE} ${FINANCIAL_FIELDS.map((f) => `-${f}`).join(" ")}`;
+}
+
+// Shared by list and CSV export so both always filter identically.
+// `district` / `taluka` accept a key from the filter dropdown or free text in
+// English or Marathi - all resolve to the same language-independent key.
+function buildGpFilter(query) {
+  const { q, taluka, district, softwareUsageStatus } = query;
+  const filter = {};
+  const search = buildNameSearchClauses(q);
+  if (search) filter.$or = search;
+  const districtKey = keyFromParam("district", district);
+  const talukaKey = keyFromParam("taluka", taluka);
+  if (districtKey) filter.districtKey = districtKey;
+  if (talukaKey) filter.talukaKey = talukaKey;
+  if (softwareUsageStatus) filter.softwareUsageStatus = softwareUsageStatus;
+  return filter;
+}
+
+// `_id` is always the final tiebreaker so pagination is stable - otherwise rows
+// with equal sort values (e.g. thousands of never-contacted GPs) can repeat or vanish between pages.
 function buildGpSortStage(sort) {
   switch (sort) {
     case "name_asc":
-      return { nameKey: 1 };
+      return { nameKey: 1, _id: 1 };
     case "name_desc":
-      return { nameKey: -1 };
+      return { nameKey: -1, _id: -1 };
     case "newest":
-      return { createdAt: -1 };
+      return { createdAt: -1, _id: -1 };
     case "oldest":
-      return { createdAt: 1 };
+      return { createdAt: 1, _id: 1 };
     case "population_desc":
-      return { population: -1 };
+      return { population: -1, _id: 1 };
     case "population_asc":
-      return { population: 1 };
+      return { population: 1, _id: 1 };
     default:
-      return { lastContactedAt: -1 };
+      return { lastContactedAt: -1, nameKey: 1, _id: 1 };
   }
 }
 
 // GET /api/grampanchayats?q=&taluka=&district=&softwareUsageStatus=&sort=&page=&limit=
 const listGramPanchayats = asyncHandler(async (req, res) => {
-  const { q, taluka, district, softwareUsageStatus, sort } = req.query;
+  const { sort } = req.query;
   const { page, limit, skip } = parsePagination(req.query, { defaultLimit: 50, maxLimit: 100 });
-
-  const filter = {};
-  // Matches on the normalized English key (as before) or the raw Marathi
-  // name, prefix-anchored the same way, so searching in Marathi returns the
-  // same GPs that searching in English already did.
-  if (q) {
-    const qRegex = { $regex: `^${escapeRegex(normalizeName(q))}`, $options: "i" };
-    filter.$or = [{ nameKey: qRegex }, { nameMr: qRegex }];
-  }
-  if (taluka) filter.taluka = taluka;
-  if (district) filter.district = district;
-  if (softwareUsageStatus) filter.softwareUsageStatus = softwareUsageStatus;
+  const filter = buildGpFilter(req.query);
 
   const [results, total] = await Promise.all([
-    GramPanchayat.find(filter).sort(buildGpSortStage(sort)).skip(skip).limit(limit),
+    GramPanchayat.find(filter).select(listSelect(req.user)).sort(buildGpSortStage(sort)).skip(skip).limit(limit).lean(),
     GramPanchayat.countDocuments(filter),
   ]);
 
-  const shown = canViewFinancials(req.user) ? results : results.map(stripFinancials);
-  return res.json({ results: shown, pagination: buildPaginationMeta(page, limit, total) });
+  return res.json({ results, pagination: buildPaginationMeta(page, limit, total) });
 });
 
-// GET /api/grampanchayats/filter-options?district= - admin only
-//
-// Talukas are scoped to the given district when one is selected, so a
-// district->taluka filter pair actually cascades instead of showing every
-// taluka in Maharashtra regardless of which district is picked.
+// GET /api/grampanchayats/filter-options?district=
+// One entry per real place as { key, en, mr, label, count } carrying BOTH
+// language labels: the UI shows the label for the selected language while the
+// filter value (`key`) stays the same when the language is switched.
+// Talukas cascade from the selected district.
 const getFilterOptions = asyncHandler(async (req, res) => {
-  const { district } = req.query;
-  const [districts, talukas] = await Promise.all([
-    GramPanchayat.distinct("district"),
-    GramPanchayat.distinct("taluka", district ? { district } : {}),
-  ]);
-  return res.json({ districts: districts.sort(), talukas: talukas.sort() });
+  const data = await getGeoOptions(req.query.district);
+  res.set("Cache-Control", "private, max-age=30");
+  return res.json(data);
 });
 
 // GET /api/grampanchayats/rate-defaults - the standard bilingual rate-table
@@ -116,12 +129,19 @@ const createGramPanchayat = asyncHandler(async (req, res) => {
     subscriptionEndDate, subscriptionYears, priceAmount, paymentMode, status,
   } = req.body;
 
-  if (!name || !taluka || !district) {
-    return res.status(400).json({ error: "name, taluka, and district are required" });
+  if ((!name && !nameMr) || (!taluka && !talukaMr) || (!district && !districtMr)) {
+    return res.status(400).json({ error: "name, taluka, and district are required (English or Marathi)" });
   }
 
-  const nameKey = normalizeName(name);
-  const existing = await GramPanchayat.findOne({ nameKey, taluka: taluka.trim() });
+  const nameKey = normalizeName(name || nameMr);
+  // The same GP typed in the other language also counts as a duplicate.
+  const probe = deriveGp({ name, nameMr, taluka, talukaMr, district, districtMr });
+  const existing = await GramPanchayat.findOne({
+    $or: [
+      { nameKey, taluka: String(taluka || talukaMr).trim() },
+      { districtKey: probe.districtKey, talukaKey: probe.talukaKey, identityKeys: { $in: probe.identityKeys } },
+    ],
+  });
   if (existing) {
     return res.status(409).json({ error: "A Grampanchayat with this name and taluka already exists" });
   }
@@ -133,9 +153,9 @@ const createGramPanchayat = asyncHandler(async (req, res) => {
     name,
     nameMr,
     nameKey,
-    taluka: taluka.trim(),
+    taluka: String(taluka || talukaMr).trim(),
     talukaMr,
-    district: district.trim(),
+    district: String(district || districtMr).trim(),
     districtMr,
     pincode,
     officePhone,
@@ -165,6 +185,7 @@ const createGramPanchayat = asyncHandler(async (req, res) => {
     status: status || "prospect",
   });
 
+  invalidateGeoOptionsCache();
   emitToAdmins("gramPanchayat:new", gp);
   return res.status(201).json({ gramPanchayat: gp });
 });
@@ -246,6 +267,7 @@ const updateGramPanchayat = asyncHandler(async (req, res) => {
     changedBy: req.user.id,
   });
 
+  invalidateGeoOptionsCache();
   emitToAdmins("gramPanchayat:updated", gramPanchayat);
   return res.json({ gramPanchayat });
 });
@@ -257,6 +279,7 @@ const deleteGramPanchayat = asyncHandler(async (req, res) => {
   // Activity log entries are kept (append-only audit trail) even if the
   // Grampanchayat record itself is removed - they still reference the id.
 
+  invalidateGeoOptionsCache();
   emitToAdmins("gramPanchayat:deleted", { id: req.params.id });
   return res.json({ ok: true });
 });
@@ -288,7 +311,7 @@ const addContact = asyncHandler(async (req, res) => {
     person = await Person.findById(personId);
     if (!person) return res.status(404).json({ error: "Contact not found" });
   } else {
-    if (!name || !designation) {
+    if ((!name && !nameMr) || !designation) {
       return res.status(400).json({ error: "Pick an existing contact, or provide a name and designation to create one" });
     }
     const normalizedPhone = normalizePhone(phone);
@@ -301,12 +324,12 @@ const addContact = asyncHandler(async (req, res) => {
     person = await Person.create({
       name,
       nameMr,
-      nameKey: normalizeName(name),
+      nameKey: normalizeName(name || nameMr),
       designation,
       designationMr,
       phone: normalizedPhone,
       email,
-      district: gp.district,
+      district: gp.district || gp.districtMr,
     });
   }
 
@@ -354,17 +377,9 @@ const addContact = asyncHandler(async (req, res) => {
 // Bulk-fetches the Grampanchayat directory as CSV, respecting whatever
 // filters are currently applied - the read-side counterpart to bulk import.
 const exportGramPanchayats = asyncHandler(async (req, res) => {
-  const { q, taluka, district, softwareUsageStatus } = req.query;
-  const filter = {};
-  if (q) {
-    const qRegex = { $regex: `^${escapeRegex(normalizeName(q))}`, $options: "i" };
-    filter.$or = [{ nameKey: qRegex }, { nameMr: qRegex }];
-  }
-  if (taluka) filter.taluka = taluka;
-  if (district) filter.district = district;
-  if (softwareUsageStatus) filter.softwareUsageStatus = softwareUsageStatus;
+  const filter = buildGpFilter(req.query);
 
-  const results = await GramPanchayat.find(filter).sort({ name: 1 }).limit(20000).lean();
+  const results = await GramPanchayat.find(filter).select("-searchKeys -identityKeys").sort({ nameKey: 1, _id: 1 }).limit(20000).lean();
 
   const header = [
     "grampanchayat_name", "grampanchayat_name_marathi", "mukam_post", "taluka", "taluka_marathi",
@@ -383,12 +398,17 @@ const exportGramPanchayats = asyncHandler(async (req, res) => {
   );
   const csv = [header.join(","), ...rows].join("\n");
 
-  res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", `attachment; filename="gramsoft-grampanchayats-${new Date().toISOString().slice(0, 10)}.csv"`);
-  return res.send(csv);
+  return sendCsv(res, `gramsoft-grampanchayats-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+});
+
+// POST /api/grampanchayats/reindex - admin only. Re-runs the bilingual repair on demand.
+const reindexBilingual = asyncHandler(async (req, res) => {
+  const { runBilingualBackfill } = require("../seed/backfillBilingualKeys");
+  const stats = await runBilingualBackfill({ log: () => {} });
+  return res.json({ ok: true, stats });
 });
 
 module.exports = {
-  listGramPanchayats, getFilterOptions, getRateDefaults, exportGramPanchayats, createGramPanchayat, getGramPanchayat,
+  reindexBilingual, listGramPanchayats, getFilterOptions, getRateDefaults, exportGramPanchayats, createGramPanchayat, getGramPanchayat,
   getGramPanchayatHistory, updateGramPanchayat, deleteGramPanchayat, addContact,
 };

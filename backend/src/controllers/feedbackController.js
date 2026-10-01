@@ -5,6 +5,7 @@ const { asyncHandler } = require("../utils/asyncHandler");
 const { emitToAdmins } = require("../sockets");
 const { createAdminNotification } = require("./notificationController");
 const { parsePagination, buildPaginationMeta } = require("../utils/paginate");
+const { sendCsv } = require("../utils/sendCsv");
 
 // POST /api/feedback - intentionally public. This is the link sent to
 // Grampanchayats, Talathis, etc. and they don't have (or need) a login.
@@ -183,9 +184,7 @@ const exportFeedback = asyncHandler(async (req, res) => {
 
   const csv = [header.join(","), ...rows].join("\n");
 
-  res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", `attachment; filename="gramsoft-feedback-${new Date().toISOString().slice(0, 10)}.csv"`);
-  return res.send(csv);
+  return sendCsv(res, `gramsoft-feedback-${new Date().toISOString().slice(0, 10)}.csv`, csv);
 });
 
 module.exports = { submitFeedback, listFeedback, updateFeedbackStatus, updateFeedbackDetails, mergeFeedback, exportFeedback };

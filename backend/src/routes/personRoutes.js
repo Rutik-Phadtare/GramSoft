@@ -7,7 +7,7 @@ const { protect, requireAdmin, requirePermission } = require("../middleware/auth
 
 const router = express.Router();
 
-router.get("/filter-options", protect, requireAdmin, getFilterOptions);
+router.get("/filter-options", protect, requirePermission("viewContacts"), getFilterOptions);
 router.get("/export", protect, requireAdmin, exportPersons);
 router.get("/", protect, requirePermission("viewContacts"), listPersons);
 router.post("/", protect, requireAdmin, createPerson);

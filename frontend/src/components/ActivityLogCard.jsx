@@ -3,6 +3,8 @@ import { ClipboardList } from "lucide-react";
 import Badge, { designationTone, clientInterestTone } from "./Badge";
 import Modal from "./Modal";
 import { formatDate, formatDateTime, timeAgo, activityTypeLabel } from "../utils/format";
+import { displayName } from "../utils/i18nData";
+import { useLanguage } from "../context/LanguageContext";
 
 // One activity log entry, rendered as its own card (not a row in a dense
 // list) so it reads clearly on its own, with a "View details" affordance
@@ -11,6 +13,9 @@ import { formatDate, formatDateTime, timeAgo, activityTypeLabel } from "../utils
 // was logged (as opposed to the activity's own date, which the employee
 // can pick and isn't necessarily "now").
 export default function ActivityLogCard({ entry, showEmployee = false, onOpenPerson, onOpenGramPanchayat }) {
+  const { language } = useLanguage();
+  const gpName = displayName(entry.gramPanchayatId, language).primary;
+  const personName = displayName(entry.personId, language).primary;
   const [open, setOpen] = useState(false);
 
   return (
@@ -31,13 +36,13 @@ export default function ActivityLogCard({ entry, showEmployee = false, onOpenPer
               )}
               <Badge tone="brand">{activityTypeLabel(entry.type)}</Badge>
               {entry.clientInterest && <Badge tone={clientInterestTone(entry.clientInterest)}>{activityTypeLabel(entry.clientInterest)}</Badge>}
-              {entry.personId?.name && (
+              {personName && (
                 <span className="text-xs font-medium text-ink-soft inline-flex items-center gap-1">
-                  {entry.personId.name}
+                  {personName}
                   {entry.designationSnapshot && <Badge tone={designationTone(entry.designationSnapshot)}>{entry.designationSnapshot}</Badge>}
                 </span>
               )}
-              {entry.gramPanchayatId?.name && <span className="text-xs text-ink-muted">· {entry.gramPanchayatId.name}</span>}
+              {gpName && <span className="text-xs text-ink-muted">· {gpName}</span>}
             </div>
             <p className="text-sm text-ink-soft break-words">{entry.notes}</p>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-xs text-ink-muted">
@@ -66,7 +71,7 @@ export default function ActivityLogCard({ entry, showEmployee = false, onOpenPer
                 {entry.personId.name}{entry.designationSnapshot ? ` (${entry.designationSnapshot})` : ""}
               </Field>
             )}
-            {entry.gramPanchayatId?.name && <Field label="Grampanchayat">{entry.gramPanchayatId.name}</Field>}
+            {gpName && <Field label="Grampanchayat">{gpName}</Field>}
             {entry.durationMinutes ? <Field label="Duration">{entry.durationMinutes} min</Field> : null}
             {entry.problemSolved && <Field label="Problem solved" full>{entry.problemSolved}</Field>}
             {entry.nextFollowUpDate && <Field label="Next follow-up">{formatDate(entry.nextFollowUpDate)}</Field>}

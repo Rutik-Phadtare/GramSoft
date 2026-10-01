@@ -9,6 +9,7 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "seed": "node src/seed/seedAdmin.js",
+    "backfill:bilingual": "node src/seed/backfillBilingualKeys.js",
     "backfill:software-status": "node src/seed/backfillSoftwareStatus.js",
     "migrate:activity-fields": "node src/seed/migrateActivityFieldsToConfig.js"
   },

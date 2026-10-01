@@ -13,6 +13,7 @@ import Badge from "../../components/Badge";
 import EmptyState from "../../components/EmptyState";
 import { SkeletonRows } from "../../components/Skeleton";
 import { formatDate } from "../../utils/format";
+import { displayName } from "../../utils/i18nData";
 
 const TASK_STATUS_TONE = { pending: "outline", in_progress: "accent", completed: "brand", cancelled: "signal" };
 const NEXT_STATUS = { pending: "in_progress", in_progress: "completed" };
@@ -20,7 +21,7 @@ const NEXT_STATUS_LABEL = { pending: "Start", in_progress: "Mark done" };
 
 export default function EmployeeDashboard() {
   const { user } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -135,7 +136,7 @@ export default function EmployeeDashboard() {
                 <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
                   <div>
                     <p className="text-sm font-medium text-ink">{task.title}</p>
-                    {task.gramPanchayatId?.name && <p className="text-xs text-ink-muted">{task.gramPanchayatId.name}</p>}
+                    {displayName(task.gramPanchayatId, language).primary && <p className="text-xs text-ink-muted">{displayName(task.gramPanchayatId, language).primary}</p>}
                     {task.dueDate && <p className="text-xs text-ink-muted">Due {formatDate(task.dueDate)}</p>}
                   </div>
                   <Badge tone={TASK_STATUS_TONE[task.status] || "outline"}>{task.status.replace("_", " ")}</Badge>

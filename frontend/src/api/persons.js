@@ -1,7 +1,7 @@
 import { api } from "./client";
 
 export const personApi = {
-  list: (params) => api.get("/persons", { params }).then((r) => r.data),
+  list: (params, config) => api.get("/persons", { params, ...config }).then((r) => r.data),
   filterOptions: () => api.get("/persons/filter-options").then((r) => r.data),
   async downloadCsv(params) {
     const response = await api.get("/persons/export", { params, responseType: "blob" });

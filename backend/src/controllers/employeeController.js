@@ -113,7 +113,7 @@ const employeeOverview = asyncHandler(async (req, res) => {
     ActivityLog.find({ employeeId })
       .sort({ date: -1 })
       .limit(10)
-      .populate("gramPanchayatId", "name")
+      .populate("gramPanchayatId", "name nameMr")
       .populate("personId", "name designation")
       .lean(),
     ActivityLog.countDocuments({ employeeId, date: { $gte: sevenDaysAgo } }),

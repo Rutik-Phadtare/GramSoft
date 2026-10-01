@@ -37,6 +37,15 @@ const GramPanchayatSchema = new Schema(
     talukaMr: { type: String, trim: true },
     district: { type: String, required: true, trim: true },
     districtMr: { type: String, trim: true },
+    // Language-independent keys maintained by plugins/bilingual.js. Filters,
+    // grouping and duplicate detection use these - never the display text -
+    // so English and Marathi entries of the same place are one place.
+    districtKey: { type: String },
+    talukaKey: { type: String },
+    // Lower-cased tokens (raw + phonetic, both scripts) for anchored-prefix search.
+    searchKeys: { type: [String], select: false },
+    // Phonetic full-name keys used to spot the same GP entered in the other language.
+    identityKeys: { type: [String], select: false },
     pincode: { type: String, trim: true },
     officePhone: { type: String, trim: true },
     officeEmail: { type: String, trim: true, lowercase: true },
@@ -78,6 +87,13 @@ GramPanchayatSchema.index({ name: "text", nameMr: "text" });
 GramPanchayatSchema.index({ taluka: 1 });
 GramPanchayatSchema.index({ district: 1 });
 GramPanchayatSchema.index({ softwareUsageStatus: 1 });
+GramPanchayatSchema.index({ searchKeys: 1 });
+GramPanchayatSchema.index({ districtKey: 1, talukaKey: 1, nameKey: 1 });
+GramPanchayatSchema.index({ districtKey: 1, lastContactedAt: -1 });
+GramPanchayatSchema.index({ talukaKey: 1, identityKeys: 1 });
+GramPanchayatSchema.index({ softwareUsageStatus: 1, districtKey: 1 });
+
+GramPanchayatSchema.plugin(require("./plugins/bilingual"), { kind: "gp" });
 
 // Defaults matching the categories on the client's actual paper form - the
 // registration form and a brand-new GP's editable tax config both start

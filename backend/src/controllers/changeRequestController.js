@@ -121,7 +121,7 @@ const createChangeRequest = asyncHandler(async (req, res) => {
   });
 
   await changeRequest.populate("proposedBy", "name");
-  await changeRequest.populate("gramPanchayatId", "name taluka district");
+  await changeRequest.populate("gramPanchayatId", "name nameMr taluka talukaMr district districtMr");
   emitToAdmins("changeRequest:new", changeRequest);
   if (req.user.role !== "admin") {
     await createAdminNotification({
@@ -153,7 +153,7 @@ const listChangeRequests = asyncHandler(async (req, res) => {
       .limit(limit)
       .populate("proposedBy", "name")
       .populate("reviewedBy", "name")
-      .populate("gramPanchayatId", "name taluka district"),
+      .populate("gramPanchayatId", "name nameMr taluka talukaMr district districtMr"),
     ChangeRequest.countDocuments(filter),
   ]);
 

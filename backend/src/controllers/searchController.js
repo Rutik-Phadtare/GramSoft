@@ -3,6 +3,7 @@ const GramPanchayat = require("../models/GramPanchayat");
 const Person = require("../models/Person");
 const User = require("../models/User");
 const { escapeRegex } = require("../utils/normalize");
+const { buildNameSearchClauses } = require("../utils/bilingual");
 const { asyncHandler } = require("../utils/asyncHandler");
 const { parsePagination, buildPaginationMeta } = require("../utils/paginate");
 
@@ -23,8 +24,9 @@ const globalSearch = asyncHandler(async (req, res) => {
     const [gps, persons, users] = await Promise.all([
       // Matches on either language - a GP/person with only an English name,
       // only a Marathi name, or both, is found either way.
-      GramPanchayat.find({ $or: [{ name: regex }, { nameMr: regex }] }).select("_id"),
-      Person.find({ $or: [{ name: regex }, { nameMr: regex }] }).select("_id"),
+      // Cross-script: "shivane" finds शिवणे and vice versa, from the start of any word.
+      GramPanchayat.find({ $or: buildNameSearchClauses(q) }).select("_id").limit(2000).lean(),
+      Person.find({ $or: buildNameSearchClauses(q) }).select("_id").limit(2000).lean(),
       User.find({ name: regex }).select("_id"),
     ]);
     const gpIds = gps.map((g) => g._id);
@@ -57,8 +59,8 @@ const globalSearch = asyncHandler(async (req, res) => {
       .skip(skip)
       .limit(limit)
       .populate("employeeId", "name")
-      .populate("gramPanchayatId", "name taluka")
-      .populate("personId", "name designation phone"),
+      .populate("gramPanchayatId", "name nameMr taluka talukaMr")
+      .populate("personId", "name nameMr designation phone"),
     ActivityLog.countDocuments(filter),
   ]);
 

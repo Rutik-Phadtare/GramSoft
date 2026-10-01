@@ -57,7 +57,7 @@ const listTasks = asyncHandler(async (req, res) => {
       .limit(limit)
       .populate("assignedTo", "name email team")
       .populate("assignedBy", "name")
-      .populate("gramPanchayatId", "name taluka district"),
+      .populate("gramPanchayatId", "name nameMr taluka talukaMr district districtMr"),
     Task.countDocuments(filter),
   ]);
 
@@ -76,7 +76,7 @@ const updateTask = asyncHandler(async (req, res) => {
   const task = await Task.findByIdAndUpdate(req.params.id, updates, { new: true })
     .populate("assignedTo", "name email team")
     .populate("assignedBy", "name")
-    .populate("gramPanchayatId", "name taluka district");
+    .populate("gramPanchayatId", "name nameMr taluka talukaMr district districtMr");
   if (!task) return res.status(404).json({ error: "Not found" });
 
   emitToUser(task.assignedTo._id, "task:updated", task);

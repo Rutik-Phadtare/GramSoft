@@ -11,6 +11,8 @@ const { validateEnv } = require("./src/config/validateEnv");
 const { connectDB } = require("./src/config/db");
 const { initSocket } = require("./src/sockets");
 const { errorHandler, notFound } = require("./src/middleware/errorHandler");
+const { loadGeoState } = require("./src/utils/geo");
+const { runBilingualBackfill, needsBilingualBackfill } = require("./src/seed/backfillBilingualKeys");
 
 // Fail fast on missing/unsafe config, before touching the database or
 // binding a port - a broken deploy should never half-start.
@@ -94,9 +96,15 @@ const PORT = process.env.PORT || 5000;
 
 async function start() {
   await connectDB();
+  // Load learned district/taluka spellings before serving so new writes are keyed consistently.
+  await loadGeoState().catch((err) => console.warn("[geo] could not load geo state:", err.message));
   initSocket(httpServer);
   httpServer.listen(PORT, () => {
     console.log(`[server] GramSoft API listening on http://localhost:${PORT}`);
+    // Records created before English/Marathi keys existed get them in the background (idempotent).
+    needsBilingualBackfill()
+      .then((needed) => needed && runBilingualBackfill())
+      .catch((err) => console.error("[backfill] failed:", err));
   });
 }
 

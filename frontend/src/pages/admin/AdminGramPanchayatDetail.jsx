@@ -20,6 +20,7 @@ import ChangeHistoryList from "../../components/ChangeHistoryList";
 import EmptyState from "../../components/EmptyState";
 import { SkeletonRows } from "../../components/Skeleton";
 import { formatDate, formatDateTime, activityTypeLabel, softwareStatusLabel, paymentModeLabel } from "../../utils/format";
+import { nameLine, placeLine, displayName } from "../../utils/i18nData";
 
 const PAYMENT_MODES = ["cash", "upi", "bank_transfer", "cheque", "other"];
 const RATE_TABS = [
@@ -80,7 +81,7 @@ function CardHeader({ icon: Icon, title, editing, onEdit, onCancel, onSave, savi
 
 export default function AdminGramPanchayatDetail() {
   const { id } = useParams();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -300,10 +301,10 @@ export default function AdminGramPanchayatDetail() {
       <PageHeader
         eyebrow={
           <span className="inline-flex items-center gap-1.5">
-            <MapPin className="h-3 w-3" /> {gp.taluka}, {gp.district}
+            <MapPin className="h-3 w-3" /> {placeLine(gp, language)}
           </span>
         }
-        title={gp.nameMr ? `${gp.name} · ${gp.nameMr}` : gp.name}
+        title={nameLine(gp, language)}
         action={
           <button onClick={handleDelete} className="btn btn-outline text-signal-600 border-signal-300 hover:bg-signal-50">
             <Trash2 className="h-4 w-4" /> Delete
@@ -556,7 +557,7 @@ export default function AdminGramPanchayatDetail() {
                   <li key={a._id}>
                     <Link to={`/admin/contacts/${a.personId?._id}`} className="flex items-center justify-between gap-2 py-2.5 hover:bg-canvas/60 -mx-2 px-2 rounded-lg transition-colors">
                       <div>
-                        <p className="text-sm font-medium text-ink">{a.personId?.name}{a.personId?.nameMr ? ` · ${a.personId.nameMr}` : ""}</p>
+                        <p className="text-sm font-medium text-ink">{nameLine(a.personId, language)}</p>
                         <p className="text-xs text-ink-muted">
                           {a.personId?.phone || "No phone on file"}{a.personId?.email ? ` · ${a.personId.email}` : ""}
                         </p>
@@ -622,7 +623,7 @@ export default function AdminGramPanchayatDetail() {
                 {data.pastContacts.map((a) => (
                   <li key={a._id} className="flex items-center justify-between gap-2 py-2.5">
                     <div>
-                      <p className="text-sm text-ink-soft">{a.personId?.name}</p>
+                      <p className="text-sm text-ink-soft">{displayName(a.personId, language).primary}</p>
                       <p className="text-xs text-ink-muted">{formatDate(a.fromDate)} – {formatDate(a.toDate)}</p>
                     </div>
                     <Badge tone="outline">{a.designationAtAssignment}</Badge>
@@ -648,12 +649,12 @@ export default function AdminGramPanchayatDetail() {
             onChange={setExistingPerson}
             renderOption={(p) => (
               <div className="flex items-center justify-between gap-2">
-                <div><p className="text-sm font-medium text-ink">{p.name}</p><p className="text-xs text-ink-muted">{p.phone || "No phone on file"}</p></div>
+                <div><p className="text-sm font-medium text-ink">{nameLine(p, language)}</p><p className="text-xs text-ink-muted">{p.phone || "No phone on file"}</p></div>
                 <Badge tone={designationTone(p.designation)}>{p.designation}</Badge>
               </div>
             )}
             renderSelected={(p) => (
-              <div className="flex items-center gap-2"><p className="text-sm font-medium text-ink">{p.name}</p><Badge tone={designationTone(p.designation)}>{p.designation}</Badge></div>
+              <div className="flex items-center gap-2"><p className="text-sm font-medium text-ink">{nameLine(p, language)}</p><Badge tone={designationTone(p.designation)}>{p.designation}</Badge></div>
             )}
           />
         ) : (

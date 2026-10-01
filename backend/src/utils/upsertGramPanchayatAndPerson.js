@@ -3,6 +3,9 @@ const Person = require("../models/Person");
 const PersonAssignment = require("../models/PersonAssignment");
 const { normalizeName, normalizePhone } = require("./normalize");
 const { findHolderConflict, replaceHolder } = require("./singleHolderGuard");
+const { deriveGp, derivePerson, relocateNames, sameEntity } = require("./bilingual");
+const { hasDevanagari } = require("./phonetic");
+const { invalidateGeoOptionsCache } = require("./geo");
 
 // Kept identical to the one in gramPanchayatController.js so a Grampanchayat
 // ends up with the same computed status whether it arrives via bulk import,
@@ -23,23 +26,36 @@ function computeSoftwareUsageStatus(isUsingOurSoftware, softwareStartDate) {
  * @returns {Promise<{gramPanchayatId: string, gramPanchayatWasNew: boolean, personId?: string, personWasNew?: boolean, assignmentWasNew?: boolean, assignmentWasReplacement?: boolean}>}
  */
 async function upsertGramPanchayatAndPerson(input) {
-  const taluka = (input.taluka || "unspecified").trim();
-  const district = (input.district || "unspecified").trim();
-  const nameKey = input.gramPanchayatName
-    ? normalizeName(input.gramPanchayatName)
-    : normalizeName(input.gramPanchayatNameMr);
+  // A Marathi value typed into an English column (or vice versa) goes to the
+  // right language slot before anything is matched or stored.
+  const gpNames = relocateNames(input.gramPanchayatName, input.gramPanchayatNameMr);
+  const gpIn = deriveGp({
+    name: gpNames.name,
+    nameMr: gpNames.nameMr,
+    taluka: input.taluka,
+    talukaMr: input.talukaMr,
+    district: input.district,
+    districtMr: input.districtMr,
+  });
+  const taluka = gpIn.taluka || "unspecified";
+  const district = gpIn.district || "unspecified";
+  const nameKey = normalizeName(gpNames.name || gpNames.nameMr);
   const isUsingOurSoftware = input.isUsingOurSoftware ?? false;
 
-  const gpLookup = {
-    $or: [
-      { nameKey, taluka },
-      ...(input.gramPanchayatNameMr && input.talukaMr
-        ? [{ nameMr: input.gramPanchayatNameMr, talukaMr: input.talukaMr }]
-        : []),
-    ],
-  };
-
-  let gpDoc = await GramPanchayat.findOne(gpLookup);
+  // 1) exact legacy match (same normalized name + same taluka text);
+  // 2) the same place under the other language's spelling: same district +
+  //    taluka KEY (language-independent) and a matching phonetic name. Names
+  //    in the same script must still be identical, so two different villages
+  //    that merely sound alike are never merged.
+  let gpDoc = await GramPanchayat.findOne({ nameKey, taluka });
+  if (!gpDoc && gpIn.identityKeys.length && gpIn.talukaKey) {
+    const candidates = await GramPanchayat.find({
+      districtKey: gpIn.districtKey,
+      talukaKey: gpIn.talukaKey,
+      identityKeys: { $in: gpIn.identityKeys },
+    }).limit(10);
+    gpDoc = candidates.find((c) => sameEntity(c, { name: gpNames.name, nameMr: gpNames.nameMr })) || null;
+  }
   let gramPanchayatWasNew = false;
 
   if (!gpDoc) {
@@ -47,13 +63,13 @@ async function upsertGramPanchayatAndPerson(input) {
       { nameKey, taluka },
       {
         $setOnInsert: {
-          name: input.gramPanchayatName,
-          nameMr: input.gramPanchayatNameMr,
+          name: gpNames.name,
+          nameMr: gpNames.nameMr,
           nameKey,
           taluka,
-          talukaMr: input.talukaMr,
+          talukaMr: gpIn.talukaMr,
           district,
-          districtMr: input.districtMr,
+          districtMr: gpIn.districtMr,
           population: input.population,
           numberOfHouseholds: input.numberOfHouseholds,
           isUsingOurSoftware,
@@ -71,56 +87,49 @@ async function upsertGramPanchayatAndPerson(input) {
 
     gpDoc = gpUpsert.value;
     gramPanchayatWasNew = !gpUpsert.lastErrorObject?.updatedExisting;
+    if (gramPanchayatWasNew) invalidateGeoOptionsCache();
   }
 
-  // A GP that already existed (e.g. created before Marathi columns were
-  // captured, or matched from an earlier plain "Add Grampanchayat" entry)
-  // may be missing nameMr/talukaMr/districtMr. If this row now supplies
-  // them, fill in just the blanks - never overwrite a value someone already
-  // recorded, so re-importing can't clobber a manual edit.
+  // A GP that already existed (entered earlier in the other language, or
+  // before Marathi columns were captured) may be missing name/nameMr/
+  // talukaMr/districtMr. Fill just the blanks - never overwrite a value
+  // someone already recorded, so re-importing can't clobber a manual edit.
+  // (districtKey/talukaKey/searchKeys refresh via the model plugin.)
   if (!gramPanchayatWasNew) {
     const fill = {};
 
-    if (!gpDoc.nameMr && input.gramPanchayatNameMr) {
-      fill.nameMr = input.gramPanchayatNameMr;
+    if (!gpDoc.nameMr && gpNames.nameMr) fill.nameMr = gpNames.nameMr;
+    if (!gpDoc.name && gpNames.name) {
+      fill.name = gpNames.name;
+      fill.nameKey = normalizeName(gpNames.name);
     }
 
-    if (!gpDoc.talukaMr && input.talukaMr) {
-      fill.talukaMr = input.talukaMr;
-    }
+    if (!gpDoc.talukaMr && gpIn.talukaMr) fill.talukaMr = gpIn.talukaMr;
+    if (!gpDoc.districtMr && gpIn.districtMr) fill.districtMr = gpIn.districtMr;
 
-    if (!gpDoc.districtMr && input.districtMr) {
-      fill.districtMr = input.districtMr;
+    // taluka/district are required, so a Marathi-only record stores Marathi
+    // text there; when the English spelling arrives later, promote it.
+    const latinTaluka = input.taluka && !hasDevanagari(input.taluka) ? input.taluka.trim() : null;
+    if (latinTaluka && (!gpDoc.taluka || hasDevanagari(gpDoc.taluka))) {
+      fill.taluka = latinTaluka;
+      if (!gpDoc.talukaMr && hasDevanagari(gpDoc.taluka)) fill.talukaMr = gpDoc.taluka;
     }
-
-    if (
-      input.gramPanchayatName &&
-      (!gpDoc.name || (gpDoc.nameMr && gpDoc.name === gpDoc.nameMr))
-    ) {
-      fill.name = input.gramPanchayatName;
-      fill.nameKey = normalizeName(input.gramPanchayatName);
-    }
-
-    if (
-      input.taluka &&
-      (!gpDoc.taluka || (gpDoc.talukaMr && gpDoc.taluka === gpDoc.talukaMr))
-    ) {
-      fill.taluka = input.taluka;
-    }
-
-    if (
-      input.district &&
-      (!gpDoc.district || (gpDoc.districtMr && gpDoc.district === gpDoc.districtMr))
-    ) {
-      fill.district = input.district;
+    const latinDistrict = input.district && !hasDevanagari(input.district) ? input.district.trim() : null;
+    if (latinDistrict && (!gpDoc.district || hasDevanagari(gpDoc.district))) {
+      fill.district = latinDistrict;
+      if (!gpDoc.districtMr && hasDevanagari(gpDoc.district)) fill.districtMr = gpDoc.district;
     }
 
     if (Object.keys(fill).length) {
-      await GramPanchayat.updateOne(
-        { _id: gpDoc._id },
-        { $set: fill }
-      );
-      Object.assign(gpDoc, fill);
+      try {
+        const updated = await GramPanchayat.findOneAndUpdate({ _id: gpDoc._id }, { $set: fill }, { new: true });
+        if (updated) gpDoc = updated;
+        invalidateGeoOptionsCache();
+      } catch (err) {
+        // A promoted English name/taluka can collide with another record's
+        // unique (nameKey, taluka); keep the row importable and skip the fill.
+        if (err.code !== 11000) throw err;
+      }
     }
   }
 
@@ -135,9 +144,9 @@ async function upsertGramPanchayatAndPerson(input) {
 
   const phone = normalizePhone(input.phone);
 
-  const personNameKey = input.personName
-    ? normalizeName(input.personName)
-    : normalizeName(input.personNameMr);
+  const personNames = relocateNames(input.personName, input.personNameMr);
+  const personNameKey = normalizeName(personNames.name || personNames.nameMr);
+  const personIn = derivePerson({ name: personNames.name, nameMr: personNames.nameMr, district });
 
   const designation = input.designation || "Other";
 
@@ -149,8 +158,8 @@ async function upsertGramPanchayatAndPerson(input) {
       { phone },
       {
         $setOnInsert: {
-          name: input.personName,
-          nameMr: input.personNameMr,
+          name: personNames.name,
+          nameMr: personNames.nameMr,
           nameKey: personNameKey,
           designation,
           designationMr: input.designationMr,
@@ -165,18 +174,23 @@ async function upsertGramPanchayatAndPerson(input) {
     personDoc = upsert.value;
     personWasNew = !upsert.lastErrorObject?.updatedExisting;
   } else {
-    const found = await Person.findOne({
-      nameKey: personNameKey,
-      district,
-    });
+    // Same person = same district (language-independent key) and same name in either script.
+    const foundCandidates = await Person.find({
+      districtKey: personIn.districtKey,
+      $or: [{ nameKey: personNameKey }, { identityKeys: { $in: personIn.identityKeys } }],
+    }).limit(10);
+    const found =
+      foundCandidates.find((c) => c.nameKey === personNameKey) ||
+      foundCandidates.find((c) => sameEntity(c, { name: personNames.name, nameMr: personNames.nameMr })) ||
+      null;
 
     if (found) {
       personDoc = found;
       personWasNew = false;
     } else {
       personDoc = await Person.create({
-        name: input.personName,
-        nameMr: input.personNameMr,
+        name: personNames.name,
+        nameMr: personNames.nameMr,
         nameKey: personNameKey,
         designation,
         designationMr: input.designationMr,
@@ -191,8 +205,12 @@ async function upsertGramPanchayatAndPerson(input) {
   if (!personWasNew) {
     const fill = {};
 
-    if (!personDoc.nameMr && input.personNameMr) {
-      fill.nameMr = input.personNameMr;
+    if (!personDoc.nameMr && personNames.nameMr) {
+      fill.nameMr = personNames.nameMr;
+    }
+
+    if (!personDoc.name && personNames.name) {
+      fill.name = personNames.name;
     }
 
     if (!personDoc.designationMr && input.designationMr) {

@@ -1,4 +1,5 @@
 const XLSX = require("xlsx");
+const { decodeTextFile, isXlsxOrXls, fixRow } = require("../utils/textEncoding");
 const { upsertGramPanchayatAndPerson } = require("../utils/upsertGramPanchayatAndPerson");
 const { asyncHandler } = require("../utils/asyncHandler");
 const { emitToAdmins } = require("../sockets");
@@ -128,9 +129,42 @@ const importSpreadsheet = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "No file uploaded" });
   }
 
-  const workbook = XLSX.read(req.file.buffer, { type: "buffer", cellDates: true });
+  // .xlsx/.xls are Unicode already. For CSV/TSV we detect the real encoding
+  // ourselves - SheetJS would otherwise read a UTF-8 file without a BOM as
+  // Windows-1252 and silently turn every Marathi value into junk.
+  const warnings = [];
+  let workbook;
+  let encoding = "xlsx";
+  if (isXlsxOrXls(req.file.buffer)) {
+    workbook = XLSX.read(req.file.buffer, { type: "buffer", cellDates: true });
+  } else {
+    const decoded = decodeTextFile(req.file.buffer);
+    encoding = decoded.encoding;
+    if (decoded.unsure) {
+      warnings.push(
+        "This file is not saved as UTF-8, so any Marathi text in it may already have been lost (it appears as '?'). " +
+          "In Excel use Save As \u2192 \"CSV UTF-8 (Comma delimited)\", or upload the .xlsx file instead."
+      );
+    }
+    workbook = XLSX.read(decoded.text, { type: "string", cellDates: true });
+  }
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+  // fixRow also repairs text that was already garbled inside the file itself.
+  const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" }).map(fixRow);
+
+  // Excel's legacy "CSV (Comma delimited)" replaces every Devanagari letter with "?"
+  // while saving. Nothing can recover that, so say so instead of importing "????".
+  const questionRows = rows.filter((r) => Object.values(r).some((v) => typeof v === "string" && /^\?{2,}$/.test(v.trim())));
+  if (questionRows.length) {
+    warnings.push(
+      `${questionRows.length} row(s) contain Marathi that was already replaced by "?" when the file was saved. ` +
+        "Those values cannot be recovered - re-export the original sheet as \"CSV UTF-8\" (or .xlsx) and import again."
+    );
+  }
+
+  if (warnings.length === 0 && rows.some((r) => Object.values(r).some((v) => typeof v === "string" && v.includes("\uFFFD")))) {
+    warnings.push("Some cells contain unreadable characters (\uFFFD). Re-save the file as UTF-8 or .xlsx and import again.");
+  }
 
   const results = [];
   let gramPanchayatsCreated = 0;
@@ -252,6 +286,8 @@ const importSpreadsheet = asyncHandler(async (req, res) => {
     totalRows: rows.length,
     summary,
     rows: results,
+    encoding,
+    warnings,
   });
 });
 

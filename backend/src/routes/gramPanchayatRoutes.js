@@ -1,7 +1,7 @@
 const express = require("express");
 const {
   listGramPanchayats, getFilterOptions, getRateDefaults, exportGramPanchayats, createGramPanchayat,
-  getGramPanchayat, getGramPanchayatHistory, updateGramPanchayat, deleteGramPanchayat, addContact,
+  getGramPanchayat, getGramPanchayatHistory, updateGramPanchayat, deleteGramPanchayat, addContact, reindexBilingual,
 } = require("../controllers/gramPanchayatController");
 const { protect, requireAdmin, requirePermission } = require("../middleware/auth");
 
@@ -9,7 +9,8 @@ const router = express.Router();
 
 // Order matters - static paths must be registered before /:id or they'd
 // be swallowed as an id lookup.
-router.get("/filter-options", protect, requireAdmin, getFilterOptions);
+router.get("/filter-options", protect, requirePermission("viewGramPanchayats"), getFilterOptions);
+router.post("/reindex", protect, requireAdmin, reindexBilingual);
 router.get("/rate-defaults", getRateDefaults);
 router.get("/export", protect, requireAdmin, exportGramPanchayats);
 router.get("/", protect, requirePermission("viewGramPanchayats"), listGramPanchayats);

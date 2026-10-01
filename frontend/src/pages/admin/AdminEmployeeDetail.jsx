@@ -20,6 +20,7 @@ import Toggle from "../../components/Toggle";
 import ActivityLogCard from "../../components/ActivityLogCard";
 import { SkeletonRows } from "../../components/Skeleton";
 import { formatDate } from "../../utils/format";
+import { nameLine, placeLine, displayName } from "../../utils/i18nData";
 
 const PAGE_SIZE = 20;
 
@@ -27,7 +28,7 @@ const TASK_STATUS_TONE = { pending: "outline", in_progress: "accent", completed:
 
 export default function AdminEmployeeDetail() {
   const { id } = useParams();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [employee, setEmployee] = useState(null);
   const [stats, setStats] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -277,8 +278,8 @@ export default function AdminEmployeeDetail() {
                       <p className="text-sm font-medium text-ink">{task.title}</p>
                       <Badge tone={TASK_STATUS_TONE[task.status] || "outline"}>{task.status.replace("_", " ")}</Badge>
                     </div>
-                    {task.gramPanchayatId?.name && (
-                      <p className="text-xs text-ink-muted mt-0.5">{task.gramPanchayatId.name}</p>
+                    {displayName(task.gramPanchayatId, language).primary && (
+                      <p className="text-xs text-ink-muted mt-0.5">{displayName(task.gramPanchayatId, language).primary}</p>
                     )}
                     {task.dueDate && <p className="text-xs text-ink-muted mt-0.5">Due {formatDate(task.dueDate)}</p>}
                     {task.report && (
@@ -344,8 +345,8 @@ export default function AdminEmployeeDetail() {
             fetchResults={searchGramPanchayats}
             value={taskForm.gramPanchayat}
             onChange={(gp) => setTaskForm((f) => ({ ...f, gramPanchayat: gp }))}
-            renderOption={(gp) => <div><p className="text-sm font-medium text-ink">{gp.name}</p><p className="text-xs text-ink-muted">{gp.taluka}, {gp.district}</p></div>}
-            renderSelected={(gp) => <div><p className="text-sm font-medium text-ink">{gp.name}</p><p className="text-xs text-ink-muted">{gp.taluka}, {gp.district}</p></div>}
+            renderOption={(gp) => <div><p className="text-sm font-medium text-ink">{nameLine(gp, language)}</p><p className="text-xs text-ink-muted">{placeLine(gp, language)}</p></div>}
+            renderSelected={(gp) => <div><p className="text-sm font-medium text-ink">{nameLine(gp, language)}</p><p className="text-xs text-ink-muted">{placeLine(gp, language)}</p></div>}
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <div>

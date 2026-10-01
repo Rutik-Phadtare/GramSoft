@@ -21,7 +21,7 @@ const adminOverview = asyncHandler(async (req, res) => {
       .sort({ date: -1 })
       .limit(20)
       .populate("employeeId", "name")
-      .populate("gramPanchayatId", "name")
+      .populate("gramPanchayatId", "name nameMr")
       .populate("personId", "name designation")
       .lean(),
   ]);

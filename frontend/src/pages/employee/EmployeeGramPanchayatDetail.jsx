@@ -12,6 +12,7 @@ import Modal from "../../components/Modal";
 import EmptyState from "../../components/EmptyState";
 import { SkeletonRows } from "../../components/Skeleton";
 import { formatDate, softwareStatusLabel, paymentModeLabel } from "../../utils/format";
+import { nameLine, placeLine, displayName } from "../../utils/i18nData";
 
 const GP_FIELDS = [
   ["name", "Name (English)"], ["nameMr", "Name (Marathi)"], ["mukamPost", "Mukam / Post"],
@@ -46,7 +47,7 @@ function parseValue(key, value) {
 export default function EmployeeGramPanchayatDetail() {
   const { id } = useParams();
   const { user } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [proposeOpen, setProposeOpen] = useState(false);
@@ -107,8 +108,8 @@ export default function EmployeeGramPanchayatDetail() {
     <div>
       <Link to="/grampanchayats" className="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink-soft mb-4"><ArrowLeft className="h-3.5 w-3.5" /> Back to Grampanchayats</Link>
       <PageHeader
-        eyebrow={<span className="inline-flex items-center gap-1.5"><MapPin className="h-3 w-3" /> {gp.taluka}, {gp.district}</span>}
-        title={gp.nameMr ? `${gp.name} · ${gp.nameMr}` : gp.name}
+        eyebrow={<span className="inline-flex items-center gap-1.5"><MapPin className="h-3 w-3" /> {placeLine(gp, language)}</span>}
+        title={nameLine(gp, language)}
         action={canPropose ? <button onClick={openPropose} className="btn btn-outline"><Pencil className="h-4 w-4" /> Propose a change</button> : null}
       />
 
@@ -134,7 +135,7 @@ export default function EmployeeGramPanchayatDetail() {
           </dl></div>}
         </div>
 
-        <div className="card p-5"><h2 className="font-display text-sm font-semibold text-ink mb-3 flex items-center gap-2"><Users className="h-4 w-4 text-ink-muted" /> {t("currentContacts")}</h2>{data.currentContacts.length === 0 ? <EmptyState title={t("noCurrentContact")} /> : <ul className="divide-y divide-line">{data.currentContacts.map((a) => <li key={a._id} className="py-2.5"><div className="flex items-center justify-between gap-2"><p className="text-sm font-medium text-ink">{a.personId?.name}</p><Badge tone={designationTone(a.designationAtAssignment)}>{a.designationAtAssignment}</Badge></div><p className="text-xs text-ink-muted">{a.personId?.phone || "No phone on file"}</p></li>)}</ul>}</div>
+        <div className="card p-5"><h2 className="font-display text-sm font-semibold text-ink mb-3 flex items-center gap-2"><Users className="h-4 w-4 text-ink-muted" /> {t("currentContacts")}</h2>{data.currentContacts.length === 0 ? <EmptyState title={t("noCurrentContact")} /> : <ul className="divide-y divide-line">{data.currentContacts.map((a) => <li key={a._id} className="py-2.5"><div className="flex items-center justify-between gap-2"><p className="text-sm font-medium text-ink">{nameLine(a.personId, language)}</p><Badge tone={designationTone(a.designationAtAssignment)}>{a.designationAtAssignment}</Badge></div><p className="text-xs text-ink-muted">{a.personId?.phone || "No phone on file"}</p></li>)}</ul>}</div>
       </div>
 
       <Modal open={proposeOpen} onClose={() => setProposeOpen(false)} title="Propose Grampanchayat changes" maxWidth="max-w-3xl">

@@ -10,40 +10,65 @@ const { emitToAdmins } = require("../sockets");
 const { parsePagination, buildPaginationMeta } = require("../utils/paginate");
 const { logFieldChanges } = require("../utils/diffFields");
 const { findHolderConflict, replaceHolder } = require("../utils/singleHolderGuard");
+const { buildNameSearchClauses } = require("../utils/bilingual");
+const { keyFromParam, getGeoOptions } = require("../utils/geo");
+const { sendCsv } = require("../utils/sendCsv");
+
+const PERSON_LIST_EXCLUDE = "-searchKeys -identityKeys";
+// Everything a list row needs to show WHERE a contact works, in both languages.
+const POSTING_GP_FIELDS = "name nameMr taluka talukaMr district districtMr softwareUsageStatus";
+
+// Free-text search: a name in either script, or (if it looks like a number) a phone.
+function buildPersonSearch(q) {
+  const text = String(q || "").trim();
+  if (!text) return {};
+  const digits = text.replace(/\D/g, "");
+  if (digits.length >= 3 && digits.length >= text.replace(/[\s+\-()]/g, "").length) {
+    return { phone: { $regex: escapeRegex(digits) } };
+  }
+  return { $or: buildNameSearchClauses(text) };
+}
 
 function buildPersonSortStage(sort) {
   switch (sort) {
     case "name_asc":
-      return { nameKey: 1 };
+      return { nameKey: 1, _id: 1 };
     case "name_desc":
-      return { nameKey: -1 };
+      return { nameKey: -1, _id: -1 };
     case "newest":
-      return { createdAt: -1 };
+      return { createdAt: -1, _id: -1 };
     case "oldest":
-      return { createdAt: 1 };
+      return { createdAt: 1, _id: 1 };
     default:
-      return { lastContactedAt: -1 };
+      return { lastContactedAt: -1, nameKey: 1, _id: 1 };
   }
 }
 
-// Attaches posting history (current + past) to a page's worth of person
-// docs. Only ever run on the current page (≤100 people), never the full
-// matched set, so the extra per-person query is cheap regardless of how
-// large the overall directory gets.
+// Attaches posting history (current + past) to a page's worth of people with
+// ONE query for the whole page (not one per person), grouped in memory.
 async function withPostingHistory(persons) {
-  return Promise.all(
-    persons.map(async (person) => {
-      const assignments = await PersonAssignment.find({ personId: person._id })
-        .sort({ fromDate: -1 })
-        .populate("gramPanchayatId", "name nameMr taluka talukaMr district districtMr softwareUsageStatus");
-      return {
-        ...person,
-        totalGramPanchayatsHandled: new Set(assignments.map((a) => a.gramPanchayatId?._id?.toString())).size,
-        currentPostings: assignments.filter((a) => !a.toDate),
-        pastPostings: assignments.filter((a) => a.toDate),
-      };
-    })
-  );
+  if (!persons.length) return persons;
+  const assignments = await PersonAssignment.find({ personId: { $in: persons.map((x) => x._id) } })
+    .sort({ fromDate: -1 })
+    .populate("gramPanchayatId", POSTING_GP_FIELDS)
+    .lean();
+
+  const byPerson = new Map();
+  for (const a of assignments) {
+    const key = String(a.personId);
+    if (!byPerson.has(key)) byPerson.set(key, []);
+    byPerson.get(key).push(a);
+  }
+
+  return persons.map((person) => {
+    const list = byPerson.get(String(person._id)) || [];
+    return {
+      ...person,
+      totalGramPanchayatsHandled: new Set(list.map((a) => a.gramPanchayatId?._id?.toString()).filter(Boolean)).size,
+      currentPostings: list.filter((a) => !a.toDate),
+      pastPostings: list.filter((a) => a.toDate),
+    };
+  });
 }
 
 // GET /api/persons?q=&withHistory=&designation=&district=&taluka=&softwareUsageStatus=&gramPanchayatId=&sort=&page=&limit=
@@ -69,40 +94,44 @@ const listPersons = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Invalid gramPanchayatId" });
   }
 
-  const needsPostingJoin = Boolean(taluka || softwareUsageStatus || gramPanchayatId);
+  // district / taluka accept a filter-dropdown key or free text in either
+  // language; both resolve to the same language-independent key.
+  const districtKey = keyFromParam("district", district);
+  const talukaKey = keyFromParam("taluka", taluka);
+
+  const personMatch = { ...buildPersonSearch(q) };
+  if (designation) personMatch.designation = designation;
+  if (districtKey) personMatch.districtKey = districtKey;
+
+  const needsPostingJoin = Boolean(talukaKey || softwareUsageStatus || gramPanchayatId);
+  const onlyGp = gramPanchayatId && !talukaKey && !softwareUsageStatus;
   let results;
   let total;
 
-  // Matches on the normalized English key (as before) or the raw Marathi
-  // name, prefix-anchored the same way, so searching in Marathi returns the
-  // same contacts that searching in English already did.
-  const qFilter = q ? { $or: [{ nameKey: { $regex: `^${escapeRegex(normalizeName(q))}`, $options: "i" } }, { nameMr: { $regex: `^${escapeRegex(normalizeName(q))}`, $options: "i" } }] } : {};
-
   if (!needsPostingJoin) {
-    const filter = { ...qFilter };
-    if (designation) filter.designation = designation;
-    if (district) filter.district = district;
-
     [results, total] = await Promise.all([
-      Person.find(filter).sort(sortStage).skip(skip).limit(limit).lean(),
-      Person.countDocuments(filter),
+      Person.find(personMatch).select(PERSON_LIST_EXCLUDE).sort(sortStage).skip(skip).limit(limit).lean(),
+      Person.countDocuments(personMatch),
+    ]);
+  } else if (onlyGp) {
+    // Fast path (activity form): resolve the few people posted at this GP
+    // first, then filter/search only among them.
+    const personIds = await PersonAssignment.distinct("personId", {
+      gramPanchayatId: new mongoose.Types.ObjectId(gramPanchayatId),
+      toDate: null,
+    });
+    const scoped = { ...personMatch, _id: { $in: personIds } };
+    [results, total] = await Promise.all([
+      Person.find(scoped).select(PERSON_LIST_EXCLUDE).sort(sortStage).skip(skip).limit(limit).lean(),
+      Person.countDocuments(scoped),
     ]);
   } else {
-    const personMatch = { ...qFilter };
-    if (designation) personMatch.designation = designation;
-    if (district) personMatch.district = district;
-
     const elemConditions = {};
-    if (taluka) elemConditions.taluka = taluka;
+    if (talukaKey) elemConditions.talukaKey = talukaKey;
     if (softwareUsageStatus) elemConditions.softwareUsageStatus = softwareUsageStatus;
     if (gramPanchayatId) elemConditions._id = new mongoose.Types.ObjectId(gramPanchayatId);
-    // $elemMatch (not two separate dotted-path conditions) so that when
-    // multiple filters are given, they must all be true of the SAME current
-    // posting - otherwise a person with postings at two different GPs could
-    // wrongly match on "taluka X" from one and "GP Y" from the other.
-    const postingMatch = Object.keys(elemConditions).length
-      ? { currentGramPanchayats: { $elemMatch: elemConditions } }
-      : {};
+    // $elemMatch so multiple filters must all hold for the SAME current posting.
+    const postingMatch = { currentGramPanchayats: { $elemMatch: elemConditions } };
 
     const pipeline = [
       ...(Object.keys(personMatch).length ? [{ $match: personMatch }] : []),
@@ -112,6 +141,7 @@ const listPersons = asyncHandler(async (req, res) => {
           let: { personId: "$_id" },
           pipeline: [
             { $match: { $expr: { $and: [{ $eq: ["$personId", "$$personId"] }, { $eq: ["$toDate", null] }] } } },
+            { $project: { gramPanchayatId: 1 } },
           ],
           as: "currentAssignments",
         },
@@ -124,11 +154,15 @@ const listPersons = asyncHandler(async (req, res) => {
           as: "currentGramPanchayats",
         },
       },
-      ...(Object.keys(postingMatch).length ? [{ $match: postingMatch }] : []),
+      { $match: postingMatch },
       { $sort: sortStage },
       {
         $facet: {
-          data: [{ $skip: skip }, { $limit: limit }, { $project: { currentAssignments: 0, currentGramPanchayats: 0 } }],
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            { $project: { currentAssignments: 0, currentGramPanchayats: 0, searchKeys: 0, identityKeys: 0 } },
+          ],
           totalCount: [{ $count: "count" }],
         },
       },
@@ -147,10 +181,13 @@ const listPersons = asyncHandler(async (req, res) => {
   return res.json({ results: await withPostingHistory(results), pagination });
 });
 
-// GET /api/persons/filter-options - admin only
+// GET /api/persons/filter-options
+// Same bilingual district options as the Grampanchayat directory, so both
+// screens always offer identical, language-aware choices.
 const getFilterOptions = asyncHandler(async (req, res) => {
-  const districts = await Person.distinct("district");
-  return res.json({ districts: districts.filter(Boolean).sort() });
+  const data = await getGeoOptions();
+  res.set("Cache-Control", "private, max-age=30");
+  return res.json({ districts: data.districts });
 });
 
 // GET /api/persons/export?...same filters as listPersons - admin only
@@ -158,15 +195,12 @@ const getFilterOptions = asyncHandler(async (req, res) => {
 // are currently applied - the read-side counterpart to bulk import.
 const exportPersons = asyncHandler(async (req, res) => {
   const { q, designation, district } = req.query;
-  const filter = {};
-  if (q) {
-    const qRegex = { $regex: `^${escapeRegex(normalizeName(q))}`, $options: "i" };
-    filter.$or = [{ nameKey: qRegex }, { nameMr: qRegex }];
-  }
+  const filter = { ...buildPersonSearch(q) };
   if (designation) filter.designation = designation;
-  if (district) filter.district = district;
+  const districtKey = keyFromParam("district", district);
+  if (districtKey) filter.districtKey = districtKey;
 
-  const persons = await Person.find(filter).sort({ name: 1 }).limit(20000).lean();
+  const persons = await Person.find(filter).select("-searchKeys -identityKeys").sort({ nameKey: 1, _id: 1 }).limit(20000).lean();
   const personIds = persons.map((p) => p._id);
   const assignments = await PersonAssignment.find({ personId: { $in: personIds }, toDate: null })
     .populate("gramPanchayatId", "name nameMr taluka talukaMr district districtMr");
@@ -191,16 +225,14 @@ const exportPersons = asyncHandler(async (req, res) => {
   });
   const csv = [header.join(","), ...rows].join("\n");
 
-  res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", `attachment; filename="gramsoft-contacts-${new Date().toISOString().slice(0, 10)}.csv"`);
-  return res.send(csv);
+  return sendCsv(res, `gramsoft-contacts-${new Date().toISOString().slice(0, 10)}.csv`, csv);
 });
 
 // POST /api/persons - admin only
 const createPerson = asyncHandler(async (req, res) => {
   const { name, nameMr, designation, designationMr, phone, email, address, addressMr, district, notes } = req.body;
-  if (!name || !designation) {
-    return res.status(400).json({ error: "name and designation are required" });
+  if ((!name && !nameMr) || !designation) {
+    return res.status(400).json({ error: "name (English or Marathi) and designation are required" });
   }
 
   const normalizedPhone = normalizePhone(phone);
@@ -214,7 +246,7 @@ const createPerson = asyncHandler(async (req, res) => {
   const person = await Person.create({
     name,
     nameMr,
-    nameKey: normalizeName(name),
+    nameKey: normalizeName(name || nameMr),
     designation,
     designationMr,
     phone: normalizedPhone,
@@ -242,7 +274,7 @@ const getPerson = asyncHandler(async (req, res) => {
     .sort({ date: -1 })
     .limit(50)
     .populate("employeeId", "name")
-    .populate("gramPanchayatId", "name taluka");
+    .populate("gramPanchayatId", "name nameMr taluka talukaMr");
 
   return res.json({
     person,
