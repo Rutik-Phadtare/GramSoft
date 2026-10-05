@@ -181,7 +181,7 @@ export const translations = {
     population: "लोकसंख्या", households: "घरांची संख्या", date: "दिनांक", sortBy: "क्रमवारी",
 
     designation_Talathi: "तलाठी", designation_Gramsevak: "ग्रामसेवक", designation_Sarpanch: "सरपंच",
-    designation_Sachiv: "सचिव", designation_ComputerOperator: "संगणक कर्मचारी", designation_Other: "इतर",
+    designation_Sachiv: "सचिव", designation_ComputerOperator: "संगणक ऑपरेटर", designation_Other: "इतर",
 
     language: "भाषा", english: "इंग्रजी", marathi: "मराठी",
 

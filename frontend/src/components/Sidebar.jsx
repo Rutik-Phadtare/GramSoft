@@ -60,6 +60,11 @@ const ADMIN_NAV = [
     notificationKey: "dashboard",
   },
   {
+    to: "/admin/activity/new",
+    key: "logActivity",
+    icon: ClipboardEdit,
+  },
+  {
     to: "/admin/explorer",
     key: "explorer",
     icon: Search,

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Users, Pencil, Landmark } from "lucide-react";
+import { Users, Pencil, Landmark, ArrowRightLeft } from "lucide-react";
 import { personApi } from "../../api/persons";
+import { gramPanchayatApi } from "../../api/gramPanchayats";
 import { changeRequestApi } from "../../api/changeRequests";
 import { apiErrorMessage } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
@@ -9,10 +10,11 @@ import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useLanguage } from "../../context/LanguageContext";
 import { useGeoOptions } from "../../hooks/useGeoOptions";
 import { useLatestRequest } from "../../hooks/useLatestRequest";
-import { displayName, workplaceLine } from "../../utils/i18nData";
+import { displayName, workplaceLine, nameLine, placeLine } from "../../utils/i18nData";
 import { designationTranslationKey } from "../../utils/constants";
 import PageHeader from "../../components/PageHeader";
 import SearchInput from "../../components/SearchInput";
+import EntitySearchSelect from "../../components/EntitySearchSelect";
 import Badge, { designationTone } from "../../components/Badge";
 import Modal from "../../components/Modal";
 import Pagination from "../../components/Pagination";
@@ -20,6 +22,7 @@ import EmptyState from "../../components/EmptyState";
 import { SkeletonRows } from "../../components/Skeleton";
 
 const PAGE_SIZE = 25;
+const searchGps = (q) => gramPanchayatApi.list({ q }).then((d) => d.results);
 const emptyForm = {
   name: "", nameMr: "", designation: "", phone: "", email: "",
   address: "", addressMr: "", district: "", notes: "",
@@ -44,6 +47,16 @@ export default function EmployeeContacts() {
   const [proposeError, setProposeError] = useState("");
   const [proposeSaving, setProposeSaving] = useState(false);
   const [proposed, setProposed] = useState(false);
+
+  // Workplace (Grampanchayat) change proposal - sent to the same admin
+  // approval queue as every other contact proposal.
+  const [wpTarget, setWpTarget] = useState(null);
+  const [wpFromId, setWpFromId] = useState("");
+  const [wpTo, setWpTo] = useState(null);
+  const [wpReason, setWpReason] = useState("");
+  const [wpError, setWpError] = useState("");
+  const [wpSaving, setWpSaving] = useState(false);
+  const [wpDone, setWpDone] = useState(false);
 
   const canPropose = user?.role === "admin" || user?.permissions?.editContacts !== false;
   const canView = user?.role === "admin" || user?.permissions?.viewContacts !== false;
@@ -82,6 +95,41 @@ export default function EmployeeContacts() {
     });
     setProposeError("");
     setProposed(false);
+  }
+
+  function openWorkplace(person) {
+    const postings = person.currentPostings || [];
+    setWpTarget(person);
+    setWpFromId(postings.length === 1 ? postings[0].gramPanchayatId?._id || "" : "");
+    setWpTo(null);
+    setWpReason("");
+    setWpError("");
+    setWpDone(false);
+  }
+
+  async function submitWorkplace(e) {
+    e.preventDefault();
+    setWpError("");
+    const postings = wpTarget.currentPostings || [];
+    if (postings.length > 1 && !wpFromId) return setWpError("Choose which current workplace this change moves them from.");
+    if (!wpTo) return setWpError("Choose the proposed Grampanchayat.");
+    if (wpTo._id === wpFromId) return setWpError("The proposed Grampanchayat is the same as the current one.");
+    setWpSaving(true);
+    try {
+      await changeRequestApi.create({
+        entityType: "Person",
+        action: "change_workplace",
+        entityId: wpTarget._id,
+        gramPanchayatId: wpTo._id,
+        previousGramPanchayatId: wpFromId || undefined,
+        reason: wpReason.trim() || "Employee proposed a workplace change",
+      });
+      setWpDone(true);
+    } catch (err) {
+      setWpError(apiErrorMessage(err));
+    } finally {
+      setWpSaving(false);
+    }
   }
 
   async function submitPropose(e) {
@@ -154,7 +202,12 @@ export default function EmployeeContacts() {
                         )) : <span className="text-xs text-ink-muted">{t("noCurrentWorkplace")}</span>}
                       </div>
                     </Link>
-                    {canPropose && <button type="button" onClick={() => openPropose(p)} className="btn btn-outline text-xs py-1.5"><Pencil className="h-3.5 w-3.5" /> Propose change</button>}
+                    {canPropose && (
+                      <div className="flex flex-col gap-1.5 sm:flex-row flex-shrink-0">
+                        <button type="button" onClick={() => openPropose(p)} className="btn btn-outline text-xs py-1.5"><Pencil className="h-3.5 w-3.5" /> Propose change</button>
+                        <button type="button" onClick={() => openWorkplace(p)} className="btn btn-outline text-xs py-1.5"><ArrowRightLeft className="h-3.5 w-3.5" /> Change workplace</button>
+                      </div>
+                    )}
                   </div>
                 </li>
               );
@@ -186,6 +239,45 @@ export default function EmployeeContacts() {
             <div className="flex gap-3 pt-1"><button type="submit" disabled={proposeSaving} className="btn btn-primary">{proposeSaving ? t("saving") : "Submit for approval"}</button><button type="button" onClick={() => setProposeTarget(null)} className="btn btn-ghost">{t("cancel")}</button></div>
           </form>
         )}
+      </Modal>
+
+      <Modal open={Boolean(wpTarget)} onClose={() => setWpTarget(null)} title="Propose workplace change" maxWidth="max-w-lg">
+        {wpTarget && (wpDone ? (
+          <div className="space-y-4"><p className="text-sm text-ink-soft">Your workplace change proposal was sent to admin review. {displayName(wpTarget, language).primary} stays at their current workplace until it is approved.</p><button type="button" onClick={() => setWpTarget(null)} className="btn btn-primary">Done</button></div>
+        ) : (
+          <form onSubmit={submitWorkplace} className="space-y-4">
+            {wpError && <div className="rounded-lg bg-signal-50 text-signal-600 text-sm px-3 py-2">{wpError}</div>}
+            <p className="text-sm font-medium text-ink">{displayName(wpTarget, language).primary}</p>
+            <div>
+              <label className="field-label">Current workplace</label>
+              {(wpTarget.currentPostings || []).length > 1 ? (
+                <select className="field-input" value={wpFromId} onChange={(e) => setWpFromId(e.target.value)}>
+                  <option value="">Select…</option>
+                  {wpTarget.currentPostings.map((a) => <option key={a._id} value={a.gramPanchayatId?._id}>{workplaceLine(a.gramPanchayatId, language)}</option>)}
+                </select>
+              ) : (wpTarget.currentPostings || []).length === 1 ? (
+                <p className="rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink-soft">{workplaceLine(wpTarget.currentPostings[0].gramPanchayatId, language)}</p>
+              ) : (
+                <p className="rounded-lg border border-dashed border-line bg-canvas px-3 py-2 text-sm text-ink-muted">{t("noCurrentWorkplace")}</p>
+              )}
+            </div>
+            <EntitySearchSelect
+              label="Proposed workplace *"
+              placeholder={t("searchGpPlaceholder")}
+              fetchResults={searchGps}
+              value={wpTo}
+              onChange={setWpTo}
+              emptyHint="No matching Grampanchayat found."
+              renderOption={(gp) => (<div><p className="text-sm font-medium text-ink">{nameLine(gp, language)}</p><p className="text-xs text-ink-muted">{placeLine(gp, language)}</p></div>)}
+              renderSelected={(gp) => (<div><p className="text-sm font-medium text-ink">{nameLine(gp, language)}</p><p className="text-xs text-ink-muted">{placeLine(gp, language)}</p></div>)}
+            />
+            <div>
+              <label className="field-label">Reason (optional)</label>
+              <textarea className="field-textarea" rows={2} value={wpReason} onChange={(e) => setWpReason(e.target.value)} placeholder="e.g. He told me he was transferred last month" />
+            </div>
+            <div className="flex gap-3 pt-1"><button type="submit" disabled={wpSaving} className="btn btn-primary">{wpSaving ? t("saving") : "Submit for approval"}</button><button type="button" onClick={() => setWpTarget(null)} className="btn btn-ghost">{t("cancel")}</button></div>
+          </form>
+        ))}
       </Modal>
     </div>
   );

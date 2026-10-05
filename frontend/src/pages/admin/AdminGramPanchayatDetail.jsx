@@ -9,6 +9,9 @@ import { formFieldApi } from "../../api/formFields";
 import { apiErrorMessage } from "../../api/client";
 import { useSocketEvent } from "../../context/SocketContext";
 import { DESIGNATIONS } from "../../utils/constants";
+import { DesignationOptions } from "../../components/DesignationSelect";
+import DesignationMrSelect from "../../components/DesignationSelect";
+import { applyDesignationChange } from "../../utils/constants";
 import { useLanguage } from "../../context/LanguageContext";
 import PageHeader from "../../components/PageHeader";
 import Badge, { designationTone, softwareStatusTone } from "../../components/Badge";
@@ -663,11 +666,11 @@ export default function AdminGramPanchayatDetail() {
             <div><label className="field-label">{t("nameMarathi")}</label><input className="field-input" value={newContactForm.nameMr} onChange={(e) => setNewContactForm((f) => ({ ...f, nameMr: e.target.value }))} /></div>
             <div>
               <label className="field-label">{t("designation")}</label>
-              <select className="field-input" value={newContactForm.designation} onChange={(e) => setNewContactForm((f) => ({ ...f, designation: e.target.value }))}>
-                {DESIGNATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+              <select className="field-input" value={newContactForm.designation} onChange={(e) => setNewContactForm((f) => applyDesignationChange(f, "designation", e.target.value))}>
+                <DesignationOptions />
               </select>
             </div>
-            <div><label className="field-label">{t("designationMarathi")}</label><input className="field-input" value={newContactForm.designationMr} onChange={(e) => setNewContactForm((f) => ({ ...f, designationMr: e.target.value }))} /></div>
+            <div><label className="field-label">{t("designationMarathi")}</label><DesignationMrSelect value={newContactForm.designationMr} onChange={(v) => setNewContactForm((f) => applyDesignationChange(f, "designationMr", v))} /></div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div><label className="field-label">{t("phone")}</label><input className="field-input" value={newContactForm.phone} onChange={(e) => setNewContactForm((f) => ({ ...f, phone: e.target.value }))} /></div>
               <div><label className="field-label">{t("email")}</label><input type="email" className="field-input" value={newContactForm.email} onChange={(e) => setNewContactForm((f) => ({ ...f, email: e.target.value }))} /></div>

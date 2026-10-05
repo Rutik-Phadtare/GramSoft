@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, XCircle, UserPlus, Pencil } from "lucide-react";
+import { CheckCircle2, XCircle, UserPlus, Eye } from "lucide-react";
 import { changeRequestApi } from "../../api/changeRequests";
 import { apiErrorMessage } from "../../api/client";
 import { useSocketEvent } from "../../context/SocketContext";
@@ -8,11 +8,11 @@ import { useNotifications } from "../../context/NotificationContext";
 import { useLanguage } from "../../context/LanguageContext";
 import PageHeader from "../../components/PageHeader";
 import Badge, { designationTone } from "../../components/Badge";
-import Modal from "../../components/Modal";
+import ApprovalReviewModal from "../../components/ApprovalReviewModal";
 import Pagination from "../../components/Pagination";
 import EmptyState from "../../components/EmptyState";
 import { SkeletonRows } from "../../components/Skeleton";
-import { formatDateTime } from "../../utils/format";
+import { formatExactDateTime as formatDateTime } from "../../utils/format";
 import { displayName, talukaLabel } from "../../utils/i18nData";
 
 const PAGE_SIZE = 20;
@@ -33,18 +33,6 @@ function displayValue(value) {
   return String(value);
 }
 
-function prepareEditPayload(form, original) {
-  const next = { ...form };
-  for (const field of Object.keys(next)) {
-    const originalValue = original?.[field];
-    if (Array.isArray(originalValue) || (originalValue && typeof originalValue === "object")) {
-      try { next[field] = JSON.parse(next[field]); }
-      catch { throw new Error(`Invalid JSON in ${field}`); }
-    }
-  }
-  return next;
-}
-
 export default function AdminApprovals() {
   const { t, language } = useLanguage();
   const TABS = [
@@ -56,10 +44,7 @@ export default function AdminApprovals() {
   const [pagination, setPagination] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
-  const [editTarget, setEditTarget] = useState(null); // change request being edited
-  const [editForm, setEditForm] = useState({});
-  const [editSaving, setEditSaving] = useState(false);
-  const [editError, setEditError] = useState("");
+  const [reviewId, setReviewId] = useState(null); // request open in the review/edit modal
 
   function refresh() {
     setLoading(true);
@@ -93,7 +78,7 @@ export default function AdminApprovals() {
       // the admin before moving the previous holder to past contacts.
       if (data?.error === "ALREADY_HAS_HOLDER" && window.confirm(data.message + " Continue?")) {
         try {
-          await changeRequestApi.approve(id, edits, true);
+          await changeRequestApi.approve(id, edits, { confirmReplaceHolder: true });
           refresh();
         } catch (err2) {
           window.alert(apiErrorMessage(err2));
@@ -114,44 +99,6 @@ export default function AdminApprovals() {
       refresh();
     } finally {
       setBusyId(null);
-    }
-  }
-
-  function openEdit(r) {
-    setEditTarget(r);
-    const next = {};
-    for (const [key, value] of Object.entries(r.proposedChanges || {})) {
-      next[key] = value && typeof value === "object" ? JSON.stringify(value, null, 2) : value ?? "";
-    }
-    setEditForm(next);
-    setEditError("");
-  }
-
-  async function saveEdit() {
-    setEditSaving(true);
-    setEditError("");
-    try {
-      await changeRequestApi.update(editTarget._id, prepareEditPayload(editForm, editTarget.proposedChanges));
-      setEditTarget(null);
-      refresh();
-    } catch (err) {
-      setEditError(err instanceof Error ? err.message : apiErrorMessage(err));
-    } finally {
-      setEditSaving(false);
-    }
-  }
-
-  async function saveEditAndApprove() {
-    setEditSaving(true);
-    setEditError("");
-    try {
-      await changeRequestApi.approve(editTarget._id, prepareEditPayload(editForm, editTarget.proposedChanges));
-      setEditTarget(null);
-      refresh();
-    } catch (err) {
-      setEditError(err instanceof Error ? err.message : apiErrorMessage(err));
-    } finally {
-      setEditSaving(false);
     }
   }
 
@@ -184,11 +131,12 @@ export default function AdminApprovals() {
                   <div>
                     <p className="text-sm font-semibold text-ink flex items-center gap-2">
                       {r.isNewEntity ? <UserPlus className="h-3.5 w-3.5 text-brand-600" /> : null}
-                      {r.entityType === "General" ? "General change suggestion" : (r.isNewEntity ? (r.entityType === "GramPanchayat" ? "New Grampanchayat" : t("newContactLabel")) : t("updateToExisting"))}
-                      {r.proposedChanges.designation && <Badge tone={designationTone(r.proposedChanges.designation)}>{r.proposedChanges.designation}</Badge>}
+                      {r.action === "change_workplace" ? "Workplace change" : r.action === "replace_contact" ? "Replace Grampanchayat contact" : r.entityType === "General" ? "General change suggestion" : (r.isNewEntity ? (r.entityType === "GramPanchayat" ? "New Grampanchayat" : t("newContactLabel")) : t("updateToExisting"))}
+                      {r.proposedChanges.designation && <Badge tone={designationTone(r.proposedChanges.designation)}>{(r.proposedChanges.designation)}</Badge>}
                     </p>
                     <p className="text-xs text-ink-muted">
                       {t("proposedBy")} {r.proposedBy?.name || "unknown"} · {formatDateTime(r.createdAt)}
+                      {r.status !== "pending" && r.reviewedAt && <> · {r.status} {r.reviewedBy?.name ? `by ${r.reviewedBy.name} ` : ""}{formatDateTime(r.reviewedAt)}</>}
                       {r.entityType !== "General" && !r.isNewEntity && r.entityId && r.entityType === "Person" && (
                         <> · <Link to={`/admin/contacts/${r.entityId}`} className="underline hover:text-ink-soft">{t("viewCurrentRecord")}</Link></>
                       )}
@@ -205,18 +153,32 @@ export default function AdminApprovals() {
                       <button onClick={() => approve(r._id)} disabled={busyId === r._id} className="btn btn-primary text-sm py-1.5">
                         <CheckCircle2 className="h-3.5 w-3.5" /> {t("approve")}
                       </button>
-                      <button onClick={() => openEdit(r)} className="btn btn-outline text-sm py-1.5">
-                        <Pencil className="h-3.5 w-3.5" /> Edit
+                      <button onClick={() => setReviewId(r._id)} className="btn btn-outline text-sm py-1.5">
+                        <Eye className="h-3.5 w-3.5" /> Review{r.action ? "" : " / Edit"}
                       </button>
                       <button onClick={() => reject(r._id)} disabled={busyId === r._id} className="btn btn-outline text-signal-600 border-signal-300 hover:bg-signal-50 text-sm py-1.5">
                         <XCircle className="h-3.5 w-3.5" /> {t("reject")}
                       </button>
                     </div>
                   ) : (
-                    <Badge tone={status === "approved" ? "brand" : "signal"}>{status}</Badge>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setReviewId(r._id)} className="btn btn-ghost text-sm py-1"><Eye className="h-3.5 w-3.5" /> Details</button>
+                      <Badge tone={status === "approved" ? "brand" : "signal"}>{status}</Badge>
+                    </div>
                   )}
                 </div>
 
+                {r.action === "change_workplace" ? (
+                  <div className="rounded-lg bg-canvas p-3 text-sm space-y-1">
+                    <p><span className="text-xs text-ink-muted inline-block w-32">Contact</span><span className="font-medium text-ink">{r.previousValues?.contact || "—"}</span></p>
+                    <p><span className="text-xs text-ink-muted inline-block w-32">Workplace</span><span className="text-ink-muted line-through">{r.previousValues?.workplace || "None recorded"}</span> <span className="text-ink-muted">→</span> <span className="font-medium text-ink">{r.proposedChanges.workplace}</span></p>
+                  </div>
+                ) : r.action === "replace_contact" ? (
+                  <div className="rounded-lg bg-canvas p-3 text-sm space-y-1">
+                    <p><span className="text-xs text-ink-muted inline-block w-32">Current contact</span><span className="text-ink-muted line-through">{[r.previousValues?.name || r.previousValues?.nameMr, r.previousValues?.phone, r.previousValues?.designation].filter(Boolean).join(" | ") || "—"}</span></p>
+                    <p><span className="text-xs text-ink-muted inline-block w-32">Replaced by</span><span className="font-medium text-ink">{[r.proposedChanges.name || r.proposedChanges.nameMr, r.proposedChanges.phone, r.proposedChanges.designation].filter(Boolean).join(" | ") || "—"}</span>{r.isNewEntity && <span className="text-xs text-ink-muted"> (new person)</span>}</p>
+                  </div>
+                ) : (
                 <div className="rounded-lg bg-canvas p-3 text-sm">
                   {Object.keys(r.proposedChanges).map((field) => (
                     <div key={field} className="flex items-center gap-2 py-0.5">
@@ -231,6 +193,7 @@ export default function AdminApprovals() {
                     </div>
                   ))}
                 </div>
+                )}
                 {r.reason && <p className="text-xs text-ink-muted mt-2 italic">"{r.reason}"</p>}
                 {r.reviewNote && <p className="text-xs text-signal-600 mt-2">Review note: {r.reviewNote}</p>}
               </li>
@@ -240,47 +203,7 @@ export default function AdminApprovals() {
         <Pagination pagination={pagination} onPageChange={setPage} />
       </div>
 
-      <Modal open={Boolean(editTarget)} onClose={() => setEditTarget(null)} title="Edit proposed changes" maxWidth="max-w-md">
-        {editTarget && (
-          <div>
-            {editError && <div className="rounded-lg bg-signal-50 text-signal-600 text-sm px-3 py-2 mb-4">{editError}</div>}
-            <p className="text-xs text-ink-muted mb-4">
-              {editTarget.entityType === "General"
-                ? `Refine what ${editTarget.proposedBy?.name || "the employee"} submitted before marking the suggestion accepted.`
-                : `Correct what ${editTarget.proposedBy?.name || "the employee"} proposed before it is applied to the real record.`}
-            </p>
-            <div className="space-y-3">
-              {Object.keys(editForm).map((field) => (
-                <div key={field}>
-                  <label className="field-label">{FIELD_LABEL_KEYS[field] ? t(FIELD_LABEL_KEYS[field]) : field}</label>
-                  {typeof editTarget.proposedChanges[field] === "object" ? (
-                    <textarea
-                      className="field-input min-h-24 font-mono text-xs"
-                      value={editForm[field] || ""}
-                      onChange={(e) => setEditForm((f) => ({ ...f, [field]: e.target.value }))}
-                    />
-                  ) : (
-                    <input
-                      className="field-input"
-                      value={editForm[field] || ""}
-                      onChange={(e) => setEditForm((f) => ({ ...f, [field]: e.target.value }))}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-3 pt-4">
-              <button onClick={saveEditAndApprove} disabled={editSaving} className="btn btn-primary">
-                {editSaving ? t("saving") : editTarget?.entityType === "General" ? "Save & accept" : "Save & approve"}
-              </button>
-              <button onClick={saveEdit} disabled={editSaving} className="btn btn-outline">
-                {editSaving ? t("saving") : "Save only"}
-              </button>
-              <button onClick={() => setEditTarget(null)} className="btn btn-ghost">Cancel</button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      <ApprovalReviewModal requestId={reviewId} onClose={() => setReviewId(null)} onChanged={refresh} />
     </div>
   );
 }

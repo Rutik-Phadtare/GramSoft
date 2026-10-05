@@ -2,9 +2,11 @@ import { useState } from "react";
 import { ClipboardList } from "lucide-react";
 import Badge, { designationTone, clientInterestTone } from "./Badge";
 import Modal from "./Modal";
-import { formatDate, formatDateTime, timeAgo, activityTypeLabel } from "../utils/format";
+import { formatDate, formatDateTime, formatExactDateTime, timeAgo, activityTypeLabel } from "../utils/format";
 import { displayName } from "../utils/i18nData";
 import { useLanguage } from "../context/LanguageContext";
+import { useAuth } from "../context/AuthContext";
+import AdminActivityDetail from "./AdminActivityDetail";
 
 // One activity log entry, rendered as its own card (not a row in a dense
 // list) so it reads clearly on its own, with a "View details" affordance
@@ -17,6 +19,8 @@ export default function ActivityLogCard({ entry, showEmployee = false, onOpenPer
   const gpName = displayName(entry.gramPanchayatId, language).primary;
   const personName = displayName(entry.personId, language).primary;
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   return (
     <>
@@ -53,6 +57,9 @@ export default function ActivityLogCard({ entry, showEmployee = false, onOpenPer
         </div>
       </button>
 
+      {isAdmin && <AdminActivityDetail activityId={entry._id} open={open} onClose={() => setOpen(false)} />}
+
+      {!isAdmin && (
       <Modal open={open} onClose={() => setOpen(false)} title="Activity log details" maxWidth="max-w-lg">
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -64,7 +71,7 @@ export default function ActivityLogCard({ entry, showEmployee = false, onOpenPer
             {entry.employeeId?.name && (
               <Field label="Logged by">{entry.employeeId.name}</Field>
             )}
-            <Field label="Activity date">{formatDate(entry.date)}</Field>
+            <Field label="Activity date & time">{formatExactDateTime(entry.date)}</Field>
             <Field label="Submitted on" full>{formatDateTime(entry.createdAt || entry.date)}</Field>
             {entry.personId?.name && (
               <Field label="Contact">
@@ -96,6 +103,7 @@ export default function ActivityLogCard({ entry, showEmployee = false, onOpenPer
           )}
         </div>
       </Modal>
+      )}
     </>
   );
 }

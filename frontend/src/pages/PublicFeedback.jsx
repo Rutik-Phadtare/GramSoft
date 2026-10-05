@@ -6,6 +6,7 @@ import { formFieldApi } from "../api/formFields";
 import { apiErrorMessage } from "../api/client";
 import DynamicFields from "../components/DynamicFields";
 import { DESIGNATIONS } from "../utils/constants";
+import { DesignationOptions } from "../components/DesignationSelect";
 import { useLanguage } from "../context/LanguageContext";
 
 
@@ -248,7 +249,7 @@ export default function PublicFeedback() {
                       <label className="field-label">Designation <span className="text-signal-500">*</span></label>
                       <select required className="field-input" value={form.respondentDesignation} onChange={(e) => update("respondentDesignation", e.target.value)}>
                         <option value="">Select…</option>
-                        {DESIGNATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+                        <DesignationOptions />
                       </select>
                     </div>
                     <div>

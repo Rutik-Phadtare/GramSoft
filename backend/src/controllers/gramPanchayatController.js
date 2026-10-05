@@ -9,6 +9,7 @@ const { emitToAdmins } = require("../sockets");
 const { parsePagination, buildPaginationMeta } = require("../utils/paginate");
 const { logFieldChanges } = require("../utils/diffFields");
 const { findHolderConflict, replaceHolder } = require("../utils/singleHolderGuard");
+const { prepareGpContacts, createGpContacts } = require("../utils/gpContacts");
 const { buildNameSearchClauses, deriveGp } = require("../utils/bilingual");
 const { keyFromParam, getGeoOptions, invalidateGeoOptionsCache } = require("../utils/geo");
 const { sendCsv } = require("../utils/sendCsv");
@@ -146,6 +147,10 @@ const createGramPanchayat = asyncHandler(async (req, res) => {
     return res.status(409).json({ error: "A Grampanchayat with this name and taluka already exists" });
   }
 
+  // Contacts submitted with the GP are validated before anything is written.
+  const prepared = await prepareGpContacts(req.body.contacts);
+  if (prepared.error) return res.status(prepared.status).json({ error: prepared.error });
+
   const usingSoftware = Boolean(isUsingOurSoftware);
   const startDate = softwareStartDate ? new Date(softwareStartDate) : undefined;
 
@@ -185,9 +190,20 @@ const createGramPanchayat = asyncHandler(async (req, res) => {
     status: status || "prospect",
   });
 
+  let createdPeople = [];
+  if (prepared.contacts.length) {
+    try {
+      createdPeople = (await createGpContacts({ gramPanchayat: gp, contacts: prepared.contacts, userId: req.user.id })).people;
+    } catch (err) {
+      await GramPanchayat.findByIdAndDelete(gp._id); // contacts already rolled back - leave nothing half-created
+      return res.status(409).json({ error: `Could not add the contacts, nothing was created: ${err.message}` });
+    }
+  }
+
   invalidateGeoOptionsCache();
   emitToAdmins("gramPanchayat:new", gp);
-  return res.status(201).json({ gramPanchayat: gp });
+  createdPeople.forEach((p) => emitToAdmins("person:new", p));
+  return res.status(201).json({ gramPanchayat: gp, contacts: createdPeople });
 });
 
 // GET /api/grampanchayats/:id
@@ -291,7 +307,7 @@ const deleteGramPanchayat = asyncHandler(async (req, res) => {
  * contact here," not "they moved."
  *
  * A Grampanchayat can only have one current Talathi/Sarpanch/Gramsevak/
- * Sachiv/Computer Operator at a time. If someone else already holds that
+ * Sachiv at a time (Computer Operator and Other are multi-holder). If someone else already holds that
  * role here, this returns 409 with the conflict details instead of just
  * creating a second one - the frontend shows a confirmation popup, and a
  * follow-up call with `confirmReplace: true` moves the previous holder to

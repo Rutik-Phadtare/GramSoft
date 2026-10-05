@@ -10,6 +10,9 @@ import { useGeoOptions } from "../../hooks/useGeoOptions";
 import { useLatestRequest } from "../../hooks/useLatestRequest";
 import { displayName, workplaceLine } from "../../utils/i18nData";
 import { DESIGNATIONS, designationTranslationKey } from "../../utils/constants";
+import { DesignationOptions } from "../../components/DesignationSelect";
+import DesignationMrSelect from "../../components/DesignationSelect";
+import { applyDesignationChange } from "../../utils/constants";
 import PageHeader from "../../components/PageHeader";
 import SearchInput from "../../components/SearchInput";
 import Badge, { designationTone, softwareStatusTone } from "../../components/Badge";
@@ -144,7 +147,7 @@ export default function AdminContacts() {
           <SlidersHorizontal className="h-3.5 w-3.5 text-ink-muted flex-shrink-0" />
           <select className="field-input w-auto text-sm py-1.5" value={designation} onChange={(e) => handleDesignationChange(e.target.value)}>
             <option value="">{t("allDesignations")}</option>
-            {DESIGNATIONS.map((d) => <option key={d} value={d}>{t(designationTranslationKey(d))}</option>)}
+            <DesignationOptions />
           </select>
           <select className="field-input w-auto text-sm py-1.5" value={softwareUsageStatus} onChange={(e) => handleSoftwareStatusChange(e.target.value)}>
             {SOFTWARE_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -208,11 +211,11 @@ export default function AdminContacts() {
           </div>
           <div>
             <label className="field-label">{t("designation")}</label>
-            <select className="field-input" value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))}>
-              {DESIGNATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+            <select className="field-input" value={form.designation} onChange={(e) => setForm((f) => applyDesignationChange(f, "designation", e.target.value))}>
+              <DesignationOptions />
             </select>
           </div>
-          <div><label className="field-label">{t("designationMarathi")}</label><input className="field-input" value={form.designationMr} onChange={(e) => setForm((f) => ({ ...f, designationMr: e.target.value }))} /></div>
+          <div><label className="field-label">{t("designationMarathi")}</label><DesignationMrSelect value={form.designationMr} onChange={(v) => setForm((f) => applyDesignationChange(f, "designationMr", v))} /></div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div><label className="field-label">{t("phone")}</label><input className="field-input" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
             <div><label className="field-label">{t("district")}</label><input className="field-input" value={form.district} onChange={(e) => setForm((f) => ({ ...f, district: e.target.value }))} /></div>

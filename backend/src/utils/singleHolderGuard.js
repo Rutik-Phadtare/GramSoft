@@ -2,12 +2,18 @@ const PersonAssignment = require("../models/PersonAssignment");
 const ChangeHistory = require("../models/ChangeHistory");
 const Person = require("../models/Person");
 
-// Designations a Grampanchayat can only have ONE current (open) holder of
-// at a time - a village has exactly one sitting Talathi/Sarpanch/Gramsevak/
-// Sachiv/Computer Operator. "Other" is deliberately excluded: it's a
-// catch-all bucket (peons, clerks, etc.) that legitimately has many people
-// at once, so it's never subject to this rule.
-const SINGLE_HOLDER_DESIGNATIONS = Person.DESIGNATIONS.filter((d) => d !== "Other");
+// Designations a Grampanchayat can only have ONE current (open) holder of at a
+// time: a village has exactly one sitting Talathi/Gramsevak/Sarpanch/Sachiv.
+// "Computer Operator" and "Other" are MULTI-holder: a GP can have several
+// current people in those roles, so they never conflict or trigger replacement.
+// Explicit list (not "everything except X") so adding a new designation to
+// Person.DESIGNATIONS never silently becomes single-holder.
+const SINGLE_HOLDER_DESIGNATIONS = ["Talathi", "Gramsevak", "Sarpanch", "Sachiv"].filter((d) =>
+  Person.DESIGNATIONS.includes(d)
+);
+const MULTI_HOLDER_DESIGNATIONS = Person.DESIGNATIONS.filter((d) => !SINGLE_HOLDER_DESIGNATIONS.includes(d));
+
+const isSingleHolder = (designation) => SINGLE_HOLDER_DESIGNATIONS.includes(designation);
 
 /**
  * Looks for an existing *different* person currently holding `designation`
@@ -15,7 +21,7 @@ const SINGLE_HOLDER_DESIGNATIONS = Person.DESIGNATIONS.filter((d) => d !== "Othe
  * single-holder role, or if nobody else currently holds it there.
  */
 async function findHolderConflict({ gramPanchayatId, designation, excludePersonId }) {
-  if (!SINGLE_HOLDER_DESIGNATIONS.includes(designation)) return null;
+  if (!isSingleHolder(designation)) return null;
 
   const conflict = await PersonAssignment.findOne({
     gramPanchayatId,
@@ -51,4 +57,4 @@ async function replaceHolder({ conflict, gramPanchayatId, designation, newPerson
   return conflict;
 }
 
-module.exports = { SINGLE_HOLDER_DESIGNATIONS, findHolderConflict, replaceHolder };
+module.exports = { SINGLE_HOLDER_DESIGNATIONS, MULTI_HOLDER_DESIGNATIONS, isSingleHolder, findHolderConflict, replaceHolder };

@@ -7,6 +7,7 @@ const FIELD_LABELS = {
   phone: "Phone", email: "Email", address: "Address", addressMr: "Address (Marathi)",
   district: "District", districtMr: "District (Marathi)", notes: "Notes",
   taluka: "Taluka", talukaMr: "Taluka (Marathi)",
+  workplace: "Workplace", contact: "Contact",
 };
 
 function displayValue(value) {
@@ -18,6 +19,7 @@ function displayValue(value) {
 const SOURCE_LABEL = {
   direct: "Direct edit",
   approved_request: "Approved change request",
+  approved_edited_request: "Approved after admin edit",
   merge: "Merged from a form",
 };
 

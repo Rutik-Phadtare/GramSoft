@@ -18,6 +18,9 @@ import { gramPanchayatApi } from "../../api/gramPanchayats";
 import { apiErrorMessage } from "../../api/client";
 import { useSocketEvent } from "../../context/SocketContext";
 import { DESIGNATIONS } from "../../utils/constants";
+import { DesignationOptions } from "../../components/DesignationSelect";
+import DesignationMrSelect from "../../components/DesignationSelect";
+import { applyDesignationChange } from "../../utils/constants";
 import { useLanguage } from "../../context/LanguageContext";
 
 import PageHeader from "../../components/PageHeader";
@@ -579,18 +582,9 @@ export default function AdminContactDetail() {
                 <select
                   className="field-input"
                   value={form?.designation || ""}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      designation: e.target.value,
-                    }))
-                  }
+                  onChange={(e) => setForm((f) => applyDesignationChange(f, "designation", e.target.value))}
                 >
-                  {DESIGNATIONS.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
+                  <DesignationOptions />
                 </select>
               ) : (
                 <div className="rounded-lg border border-line bg-canvas/40 px-3 py-2.5 text-sm text-ink">
@@ -606,16 +600,7 @@ export default function AdminContactDetail() {
               </label>
 
               {editing ? (
-                <input
-                  className="field-input"
-                  value={form?.designationMr || ""}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      designationMr: e.target.value,
-                    }))
-                  }
-                />
+                <DesignationMrSelect value={form?.designationMr || ""} onChange={(v) => setForm((f) => applyDesignationChange(f, "designationMr", v))} />
               ) : (
                 <div className="rounded-lg border border-line bg-canvas/40 px-3 py-2.5 text-sm text-ink">
                   {form?.designationMr || "—"}

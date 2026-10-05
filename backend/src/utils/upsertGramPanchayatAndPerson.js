@@ -249,7 +249,7 @@ async function upsertGramPanchayatAndPerson(input) {
     // contact/transfer flows: one active holder per GP/designation. When a
     // different person arrives for the same post, close the old assignment
     // first so it appears under past contacts/history instead of leaving two
-    // active holders for the same designation. "Other" intentionally remains
+    // active holders for the same designation. "Computer Operator" and "Other" intentionally remain
     // multi-holder, matching the existing singleHolderGuard contract.
     if (input.replaceExistingHolder) {
       const conflict = await findHolderConflict({

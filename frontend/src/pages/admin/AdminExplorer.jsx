@@ -12,7 +12,9 @@ import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useGeoOptions } from "../../hooks/useGeoOptions";
 import { displayName, placeLine, workplaceLine } from "../../utils/i18nData";
 import { DESIGNATIONS, designationTranslationKey } from "../../utils/constants";
+import { DesignationOptions } from "../../components/DesignationSelect";
 import PageHeader from "../../components/PageHeader";
+import AdminActivityDetail from "../../components/AdminActivityDetail";
 import SearchInput from "../../components/SearchInput";
 import Badge, {
   designationTone,
@@ -346,11 +348,7 @@ export default function AdminExplorer() {
               }
             >
               <option value="">{t("allDesignations")}</option>
-              {DESIGNATIONS.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
+              <DesignationOptions />
             </select>
 
             <input
@@ -455,11 +453,7 @@ export default function AdminExplorer() {
               }
             >
               <option value="">{t("allDesignations")}</option>
-              {DESIGNATIONS.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
+              <DesignationOptions />
             </select>
 
             <select
@@ -557,8 +551,10 @@ export default function AdminExplorer() {
 }
 
 function ActivityTable({ entries, t, language }) {
+  const [openId, setOpenId] = useState(null);
   return (
     <div className="w-full overflow-x-auto">
+      <AdminActivityDetail activityId={openId} open={Boolean(openId)} onClose={() => setOpenId(null)} />
       <table className="w-full min-w-[900px] text-sm">
         <thead>
           <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">
@@ -576,7 +572,8 @@ function ActivityTable({ entries, t, language }) {
           {entries.map((entry) => (
             <tr
               key={entry._id}
-              className="border-b border-line last:border-0 hover:bg-canvas/60"
+              onClick={() => setOpenId(entry._id)}
+              className="border-b border-line last:border-0 hover:bg-canvas/60 cursor-pointer"
             >
               <td className="px-4 py-3 whitespace-nowrap text-ink-muted">
                 {formatDateTime(entry.date)}
@@ -604,6 +601,7 @@ function ActivityTable({ entries, t, language }) {
                 {entry.personId?.name ? (
                   <Link
                     to={`/admin/contacts/${entry.personId._id}`}
+                    onClick={(e) => e.stopPropagation()}
                     className="flex items-center gap-1.5 hover:underline"
                   >
                     <span>{entry.personId.name}</span>
@@ -613,6 +611,11 @@ function ActivityTable({ entries, t, language }) {
                       {entry.designationSnapshot}
                     </Badge>
                   </Link>
+                ) : entry.newContactProposal?.name ? (
+                  <span className="flex items-center gap-1.5">
+                    <span>{entry.newContactProposal.name}</span>
+                    <Badge tone="accent">Proposed</Badge>
+                  </span>
                 ) : (
                   <span className="text-ink-muted">—</span>
                 )}
@@ -622,6 +625,7 @@ function ActivityTable({ entries, t, language }) {
                 {displayName(entry.gramPanchayatId, language).primary ? (
                   <Link
                     to={`/admin/grampanchayats/${entry.gramPanchayatId._id}`}
+                    onClick={(e) => e.stopPropagation()}
                     className="hover:underline"
                   >
                     {displayName(entry.gramPanchayatId, language).primary}

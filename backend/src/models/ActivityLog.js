@@ -28,6 +28,11 @@ const ActivityLogSchema = new Schema(
     durationMinutes: { type: Number, min: 0 },
     nextFollowUpDate: { type: Date },
     customFields: { type: Schema.Types.Mixed },
+    // Snapshot of the new contact the employee described while logging this
+    // activity (they weren't in the directory yet). The approvable proposal
+    // itself lives in ChangeRequest; this copy keeps the activity record
+    // self-contained for Admin even if that request is later edited/rejected.
+    newContactProposal: { type: Schema.Types.Mixed },
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );

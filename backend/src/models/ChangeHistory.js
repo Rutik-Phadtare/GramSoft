@@ -14,7 +14,7 @@ const ChangeHistorySchema = new Schema(
     oldValue: { type: Schema.Types.Mixed },
     newValue: { type: Schema.Types.Mixed },
     changedBy: { type: Schema.Types.ObjectId, ref: "User" },
-    source: { type: String, enum: ["direct", "approved_request", "merge"], default: "direct" },
+    source: { type: String, enum: ["direct", "approved_request", "approved_edited_request", "merge"], default: "direct" },
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );

@@ -12,6 +12,7 @@ import { displayName, placeLine } from "../../utils/i18nData";
 import PageHeader from "../../components/PageHeader";
 import SearchInput from "../../components/SearchInput";
 import Badge, { softwareStatusTone } from "../../components/Badge";
+import ContactsEditor from "../../components/ContactsEditor";
 import Modal from "../../components/Modal";
 import Pagination from "../../components/Pagination";
 import EmptyState from "../../components/EmptyState";
@@ -42,6 +43,7 @@ export default function AdminGramPanchayats() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [contacts, setContacts] = useState([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -97,10 +99,16 @@ export default function AdminGramPanchayats() {
       setError("Name, taluka, and district are required (English or Marathi).");
       return;
     }
+    if (submitting) return;
+    if (contacts.some((c) => !(c.name || "").trim() && !(c.nameMr || "").trim())) {
+      setError("Every contact needs a name, or remove it.");
+      return;
+    }
     setSubmitting(true);
     try {
       await gramPanchayatApi.create({
         ...form,
+        ...(contacts.length ? { contacts } : {}),
         population: form.population ? Number(form.population) : undefined,
         numberOfHouseholds: form.numberOfHouseholds ? Number(form.numberOfHouseholds) : undefined,
         subscriptionYears: form.subscriptionYears ? Number(form.subscriptionYears) : undefined,
@@ -108,6 +116,7 @@ export default function AdminGramPanchayats() {
       });
       setModalOpen(false);
       setForm(emptyForm);
+      setContacts([]);
       refresh();
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -258,6 +267,11 @@ export default function AdminGramPanchayats() {
             ) : (
               <div><label className="field-label">{t("whatUsingInstead")}</label><input className="field-input" value={form.previousSoftwareUsed} onChange={(e) => setForm((f) => ({ ...f, previousSoftwareUsed: e.target.value }))} /></div>
             )}
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-ink mb-2">Contacts <span className="text-xs font-normal text-ink-muted">(optional)</span></h3>
+            <ContactsEditor value={contacts} onChange={setContacts} disabled={submitting} />
           </div>
 
           <div className="flex gap-3 pt-1">

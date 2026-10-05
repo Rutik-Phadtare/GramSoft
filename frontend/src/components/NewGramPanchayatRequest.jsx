@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Building2, ChevronLeft, ChevronRight, CheckCircle2, Droplets, Hammer, ListChecks, MapPinned, Receipt } from "lucide-react";
+import { Building2, Users, ChevronLeft, ChevronRight, CheckCircle2, Droplets, Hammer, ListChecks, MapPinned, Receipt } from "lucide-react";
 import { changeRequestApi } from "../api/changeRequests";
 import { rateDefaultsApi } from "../api/rateDefaults";
 import { formFieldApi } from "../api/formFields";
@@ -7,6 +7,7 @@ import { apiErrorMessage } from "../api/client";
 import RateTableEditor from "./RateTableEditor";
 import DynamicFields from "./DynamicFields";
 import Modal from "./Modal";
+import ContactsEditor from "./ContactsEditor";
 
 const INITIAL = {
   name: "", nameMr: "", mukamPost: "", taluka: "", district: "", pincode: "",
@@ -21,6 +22,7 @@ const BASE_STEPS = [
   { key: "tax", label: "Tax rates", icon: Receipt },
   { key: "construction", label: "Construction", icon: Hammer },
   { key: "land", label: "Land rates", icon: MapPinned },
+  { key: "contacts", label: "Contacts", icon: Users },
 ];
 
 export default function NewGramPanchayatRequest({ open, onClose, onSubmitted }) {
@@ -30,6 +32,7 @@ export default function NewGramPanchayatRequest({ open, onClose, onSubmitted }) 
   const [landRates, setLandRates] = useState([]);
   const [customFieldDefs, setCustomFieldDefs] = useState([]);
   const [customValues, setCustomValues] = useState({});
+  const [contacts, setContacts] = useState([]);
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -54,6 +57,7 @@ export default function NewGramPanchayatRequest({ open, onClose, onSubmitted }) 
   function reset() {
     setForm(INITIAL);
     setCustomValues({});
+    setContacts([]);
     setStep(0);
     setError("");
     setSubmitted(false);
@@ -66,11 +70,14 @@ export default function NewGramPanchayatRequest({ open, onClose, onSubmitted }) 
       setStep(0);
       return;
     }
+    if (submitting) return;
+    const incomplete = contacts.findIndex((c) => !(c.name || "").trim() && !(c.nameMr || "").trim());
+    if (incomplete >= 0) { setError(`Contact ${incomplete + 1} needs a name, or remove it.`); setStep(steps.findIndex((x) => x.key === "contacts")); return; }
     setSubmitting(true); setError("");
     try {
       await changeRequestApi.create({
         entityType: "GramPanchayat",
-        proposedChanges: { ...form, taxRates, constructionRates, landRates, customFields: customValues },
+        proposedChanges: { ...form, taxRates, constructionRates, landRates, customFields: customValues, ...(contacts.length ? { contacts } : {}) },
         reason: "New Grampanchayat suggested from the field activity form",
         isNewEntity: true,
       });
@@ -128,6 +135,7 @@ export default function NewGramPanchayatRequest({ open, onClose, onSubmitted }) 
           {steps[step].key === "tax" && <RateTableEditor rows={taxRates} onChange={setTaxRates} columns={TAX_COLUMNS} />}
           {steps[step].key === "construction" && <RateTableEditor rows={constructionRates} onChange={setConstructionRates} columns={SQM_COLUMNS} />}
           {steps[step].key === "land" && <RateTableEditor rows={landRates} onChange={setLandRates} columns={SQM_COLUMNS} />}
+          {steps[step].key === "contacts" && <div><p className="text-xs text-ink-muted mb-3">Optional. Contacts you add here are reviewed together with the Grampanchayat.</p><ContactsEditor value={contacts} onChange={setContacts} disabled={submitting} /></div>}
           {steps[step].key === "extra" && <DynamicFields fields={customFieldDefs} values={customValues} onChange={(k, v) => setCustomValues((c) => ({ ...c, [k]: v }))} />}
 
           <div className="flex items-center justify-between pt-5 mt-5 border-t border-line">

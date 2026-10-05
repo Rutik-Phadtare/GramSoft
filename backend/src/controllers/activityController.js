@@ -11,6 +11,13 @@ const { parsePagination, buildPaginationMeta } = require("../utils/paginate");
 const { validateDynamicFieldValues } = require("../utils/dynamicFields");
 const { createAdminNotification } = require("./notificationController");
 const { sendCsv } = require("../utils/sendCsv");
+const mongoose = require("mongoose");
+const ChangeRequest = require("../models/ChangeRequest");
+const ChangeHistory = require("../models/ChangeHistory");
+const { buildNameSearchClauses } = require("../utils/bilingual");
+const {
+  PERSON_PROPOSAL_FIELDS, loadLinkedProposals, deriveNewContactProposal, buildActivityTable, tableToCsv,
+} = require("../utils/activityDetails");
 
 // No update/edit endpoint exists on purpose - activity entries are
 // append-only. A correction is a new entry, not an edit to an old one.
@@ -30,7 +37,7 @@ const LEGACY_MIRRORED_KEYS = ["clientInterest", "problemSolved", "durationMinute
 
 // POST /api/activities
 const createActivity = asyncHandler(async (req, res) => {
-  const { type, gramPanchayatId, personId, notes, clientInterest, problemSolved, durationMinutes, nextFollowUpDate, customFields } = req.body;
+  const { type, gramPanchayatId, personId, notes, clientInterest, problemSolved, durationMinutes, nextFollowUpDate, customFields, newContactProposal } = req.body;
 
   if (!type || !notes) {
     return res.status(400).json({ error: "type and notes are required" });
@@ -48,8 +55,27 @@ const createActivity = asyncHandler(async (req, res) => {
   if (validType.requireGramPanchayat && !gramPanchayatId) {
     return res.status(400).json({ error: "Gram Panchayat is required for this activity type" });
   }
-  if (validType.requireContact && !personId) {
-    return res.status(400).json({ error: "Contact is required for this activity type" });
+  // A "new contact proposal" (the employee describing someone who isn't in
+  // the directory yet) satisfies a required Contact just as well as picking
+  // an existing one. The proposal itself is queued for admin approval via
+  // POST /api/change-requests (sent by the client right after this call);
+  // here we only validate that a usable one was supplied.
+  const hasProposalPayload = newContactProposal && typeof newContactProposal === "object";
+  if (hasProposalPayload && !personId) {
+    const name = String(newContactProposal.name || "").trim();
+    const designation = String(newContactProposal.designation || "").trim();
+    if (!name || !Person.DESIGNATIONS.includes(designation)) {
+      return res.status(400).json({ error: "A new contact proposal needs a name and a valid designation" });
+    }
+    if (req.user.role !== "admin" && req.user.permissions?.editContacts === false) {
+      return res.status(403).json({ error: "You don't have permission to submit this type of proposal" });
+    }
+  }
+  // A proposal is tied to the Grampanchayat it was met at, so it only counts
+  // when one was supplied.
+  const hasValidNewContactProposal = Boolean(hasProposalPayload && !personId && gramPanchayatId);
+  if (validType.requireContact && !personId && !hasValidNewContactProposal) {
+    return res.status(400).json({ error: "Select an existing contact or propose a new contact for this activity type" });
   }
   // If this type doesn't show Gram Panchayat, Contact can't be shown either
   // (it's scoped by GP) - so neither should be recorded even if somehow
@@ -70,6 +96,17 @@ const createActivity = asyncHandler(async (req, res) => {
   const { errors, values: validatedCustomFields } = validateDynamicFieldValues(fieldDefs, customFields);
   if (errors.length) {
     return res.status(400).json({ error: errors.join("; ") });
+  }
+
+  // Keep what the employee typed about the new contact on the activity too
+  // (whitelisted + trimmed, same fields the proposal itself accepts).
+  let newContactSnapshot;
+  if (hasValidNewContactProposal) {
+    newContactSnapshot = {};
+    for (const key of PERSON_PROPOSAL_FIELDS) {
+      const v = newContactProposal[key];
+      if (v !== undefined && v !== null && String(v).trim() !== "") newContactSnapshot[key] = String(v).trim();
+    }
   }
 
   let designationSnapshot;
@@ -104,6 +141,7 @@ const createActivity = asyncHandler(async (req, res) => {
     // keys) so a field that's been renamed away from these four legacy
     // columns in the future still has its value preserved somewhere.
     customFields: Object.keys(validatedCustomFields).length ? validatedCustomFields : undefined,
+    newContactProposal: newContactSnapshot && Object.keys(newContactSnapshot).length ? newContactSnapshot : undefined,
   });
 
   // Keep "last contacted" current on both sides without needing an
@@ -176,10 +214,23 @@ const listActivities = asyncHandler(async (req, res) => {
   return res.json({ entries, pagination: buildPaginationMeta(page, limit, total) });
 });
 
-function csvEscape(value) {
-  const str = value === undefined || value === null ? "" : String(value);
-  return `"${str.replace(/"/g, '""')}"`;
+// Shared by the list export and the single-record export.
+async function exportContext(entries) {
+  // Every Admin-configured Activity field (global + all Activity Types),
+  // active or not, so an export still shows the answer for a field that's
+  // since been disabled - exported columns follow config, not a hard-coded list.
+  const [fieldDefs, proposalsByActivity] = await Promise.all([
+    FormFieldConfig.find({ target: "activity" }).sort({ order: 1 }).lean(),
+    loadLinkedProposals(entries.map((e) => e._id)),
+  ]);
+  return { fieldDefs, legacyKeys: LEGACY_MIRRORED_KEYS, proposalsByActivity };
 }
+
+const EXPORT_POPULATE = [
+  { path: "employeeId", select: "name email team" },
+  { path: "gramPanchayatId", select: "name nameMr taluka talukaMr district districtMr" },
+  { path: "personId", select: "name nameMr designation phone email address" },
+];
 
 // GET /api/activities/export - admin only, streams a CSV
 const exportActivities = asyncHandler(async (req, res) => {
@@ -189,10 +240,13 @@ const exportActivities = asyncHandler(async (req, res) => {
   if (employeeId) filter.employeeId = employeeId;
 
   if (q) {
+    // Same bilingual matching the Explorer search uses, so the export
+    // contains exactly the rows the admin is looking at.
+    const nameClauses = buildNameSearchClauses(q);
     const regex = { $regex: escapeRegex(q), $options: "i" };
     const [gps, persons, users] = await Promise.all([
-      GramPanchayat.find({ name: regex }).select("_id"),
-      Person.find({ name: regex }).select("_id"),
+      nameClauses ? GramPanchayat.find({ $or: nameClauses }).select("_id").limit(2000).lean() : [],
+      nameClauses ? Person.find({ $or: nameClauses }).select("_id").limit(2000).lean() : [],
       User.find({ name: regex }).select("_id"),
     ]);
     filter.$or = [
@@ -209,61 +263,87 @@ const exportActivities = asyncHandler(async (req, res) => {
 
   // Unlike the paginated views, an export is meant to capture everything
   // matching the filters in one go - so this caps at a generous ceiling
-  // rather than a page size, just as a guard against an unbounded query
-  // accidentally pulling the entire collection into memory at once.
-  const entries = await ActivityLog.find(filter)
-    .sort({ date: -1 })
-    .limit(20000)
-    .populate("employeeId", "name")
-    .populate("gramPanchayatId", "name nameMr taluka talukaMr district districtMr")
-    .populate("personId", "name designation phone");
+  // rather than a page size, just as a guard against an unbounded query.
+  const entries = await ActivityLog.find(filter).sort({ date: -1 }).limit(20000).populate(EXPORT_POPULATE).lean();
+  const table = buildActivityTable(entries, await exportContext(entries));
 
-  // Dynamic columns: every Admin-configured Activity field (global + all
-  // Activity Types), active or not, so an export still shows the answer
-  // for a field that's since been disabled (see requirements #18/#33 -
-  // exported columns must follow config, not a hard-coded list).
-  const dynamicFieldDefs = await FormFieldConfig.find({ target: "activity" }).sort({ order: 1 });
-  // clientInterest/problemSolved/durationMinutes/nextFollowUpDate are kept
-  // as their own legacy columns below for continuity, so don't duplicate
-  // them again just because an admin also defined a config field with that key.
-  const extraFieldDefs = dynamicFieldDefs.filter((f) => !LEGACY_MIRRORED_KEYS.includes(f.key));
-
-  const header = [
-    "date", "logged_at", "employee", "type", "grampanchayat", "taluka", "district",
-    "contact_name", "contact_designation", "contact_phone",
-    "client_interest", "problem_solved", "duration_minutes", "next_follow_up", "notes",
-    ...extraFieldDefs.map((f) => f.label),
-  ];
-
-  const rows = entries.map((e) =>
-    [
-      new Date(e.date).toISOString().slice(0, 10),
-      e.createdAt ? new Date(e.createdAt).toISOString() : "",
-      e.employeeId?.name,
-      e.type,
-      e.gramPanchayatId?.name,
-      e.gramPanchayatId?.taluka,
-      e.gramPanchayatId?.district,
-      e.personId?.name,
-      e.personId?.designation,
-      e.personId?.phone,
-      e.clientInterest,
-      e.problemSolved,
-      e.durationMinutes,
-      e.nextFollowUpDate ? new Date(e.nextFollowUpDate).toISOString().slice(0, 10) : "",
-      e.notes,
-      ...extraFieldDefs.map((f) => {
-        const v = e.customFields?.[f.key];
-        return Array.isArray(v) ? v.join("; ") : v;
-      }),
-    ]
-      .map(csvEscape)
-      .join(",")
-  );
-
-  const csv = [header.join(","), ...rows].join("\n");
-
-  return sendCsv(res, `gramsoft-activity-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+  return sendCsv(res, `gramsoft-activity-${new Date().toISOString().slice(0, 10)}.csv`, tableToCsv(table));
 });
 
-module.exports = { createActivity, listActivities, exportActivities };
+// GET /api/activities/:id/export - admin only - one activity, as a
+// Field / Value CSV (same columns as the list export, one per row).
+const exportActivity = asyncHandler(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: "Invalid activity id" });
+  const entry = await ActivityLog.findById(req.params.id).populate(EXPORT_POPULATE).lean();
+  if (!entry) return res.status(404).json({ error: "Activity not found" });
+
+  const { header, rows } = buildActivityTable([entry], await exportContext([entry]));
+  const csv = tableToCsv({ header: ["field", "value"], rows: header.map((h, i) => [h, rows[0][i]]) });
+  return sendCsv(res, `gramsoft-activity-${String(entry._id)}.csv`, csv);
+});
+
+// GET /api/activities/:id - admin only - the complete record: everything
+// stored on the activity (including any fields not in the current schema),
+// the full contact / Grampanchayat / employee, the contact the employee
+// proposed, every linked proposal, and the audit history of what it touched.
+const getActivityDetail = asyncHandler(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: "Invalid activity id" });
+
+  const entry = await ActivityLog.findById(req.params.id)
+    .populate("employeeId", "name email phone role team active")
+    .populate("gramPanchayatId", "name nameMr taluka talukaMr district districtMr mukamPost pincode officePhone officeEmail")
+    .populate("personId", "name nameMr designation designationMr phone email address addressMr district notes previousPhones")
+    .lean();
+  if (!entry) return res.status(404).json({ error: "Activity not found" });
+
+  const personId = entry.personId?._id;
+  const gpId = entry.gramPanchayatId?._id;
+
+  const [linkedMap, fieldDefs] = await Promise.all([
+    loadLinkedProposals([entry._id]),
+    FormFieldConfig.find({ target: "activity" }).select("key label type").lean(),
+  ]);
+  const linked = linkedMap.get(String(entry._id)) || [];
+
+  // Other proposals touching the same contact / Grampanchayat that were not
+  // raised from this activity - shown separately as related context.
+  const linkedIds = linked.map((p) => p._id);
+  const relatedOr = [
+    ...(personId ? [{ entityType: "Person", entityId: personId }] : []),
+    ...(gpId ? [{ gramPanchayatId: gpId, action: { $exists: true, $ne: null } }, { entityType: "GramPanchayat", entityId: gpId }] : []),
+  ];
+  const related = relatedOr.length
+    ? await ChangeRequest.find({ _id: { $nin: linkedIds }, $or: relatedOr })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .populate("proposedBy", "name")
+        .populate("reviewedBy", "name")
+        .populate("gramPanchayatId", "name nameMr taluka talukaMr")
+        .lean()
+    : [];
+
+  // Audit trail: for the existing contact, any contact a linked proposal
+  // created/changed (approval stamps entityId onto new-contact requests), and
+  // the Grampanchayat.
+  const personIds = [...new Set([personId, ...linked.filter((p) => p.entityType === "Person").map((p) => p.entityId)].filter(Boolean).map(String))];
+  const historyOr = [
+    ...(personIds.length ? [{ entityType: "Person", entityId: { $in: personIds } }] : []),
+    ...(gpId ? [{ entityType: "GramPanchayat", entityId: gpId }] : []),
+  ];
+  const history = historyOr.length
+    ? await ChangeHistory.find({ $or: historyOr }).sort({ createdAt: -1 }).limit(100).populate("changedBy", "name").lean()
+    : [];
+
+  return res.json({
+    entry,
+    newContactProposal: deriveNewContactProposal(entry, linked),
+    customFieldDefs: fieldDefs,
+    proposals: [
+      ...linked.map((p) => ({ ...p, linkedToActivity: true })),
+      ...related.map((p) => ({ ...p, linkedToActivity: false })),
+    ],
+    history,
+  });
+});
+
+module.exports = { createActivity, listActivities, exportActivities, exportActivity, getActivityDetail };

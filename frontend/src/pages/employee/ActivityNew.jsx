@@ -8,12 +8,15 @@ import { personApi } from "../../api/persons";
 import { formFieldApi } from "../../api/formFields";
 import { changeRequestApi } from "../../api/changeRequests";
 import { apiErrorMessage } from "../../api/client";
+import { useAuth } from "../../context/AuthContext";
 import { DESIGNATIONS } from "../../utils/constants";
+import { DesignationOptions } from "../../components/DesignationSelect";
+import DesignationMrSelect from "../../components/DesignationSelect";
+import { applyDesignationChange } from "../../utils/constants";
 import { useLanguage } from "../../context/LanguageContext";
 import PageHeader from "../../components/PageHeader";
 import EntitySearchSelect from "../../components/EntitySearchSelect";
 import DynamicFields from "../../components/DynamicFields";
-import Badge, { designationTone } from "../../components/Badge";
 import NewGramPanchayatRequest from "../../components/NewGramPanchayatRequest";
 import { nameLine, placeLine, displayName } from "../../utils/i18nData";
 
@@ -28,10 +31,17 @@ import { nameLine, placeLine, displayName } from "../../utils/i18nData";
 // this file.
 
 const emptyForm = { type: "", notes: "" };
-const emptyContactDetails = { name: "", nameMr: "", phone: "", address: "", addressMr: "", designation: "" };
+
+// "Name | Phone | Designation" - the one-line form a registered contact is
+// shown in when picking who was contacted.
+function contactOptionLabel(p, language) {
+  return [displayName(p, language).primary, p.phone || "No phone", p.designation].filter(Boolean).join(" | ");
+}
+const emptyContactDetails = { name: "", nameMr: "", phone: "", address: "", addressMr: "", designation: "", designationMr: "" };
 
 export default function ActivityNew() {
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   const { t, language } = useLanguage();
   const [types, setTypes] = useState([]);
   const [customFieldDefs, setCustomFieldDefs] = useState([]);
@@ -176,8 +186,12 @@ export default function ActivityNew() {
       setError("Gram Panchayat is required for this activity type.");
       return;
     }
-    if (requireContact && !person) {
-      setError("Contact is required for this activity type.");
+    // A contact is satisfied by EITHER an existing contact picked from the
+    // list OR a complete new-contact proposal (name + designation) - the
+    // backend enforces the same rule (activityController#createActivity).
+    const hasNewContactProposal = !person && contactDetailsOpen && contactDetails.name.trim() && contactDetails.designation;
+    if (requireContact && !person && !hasNewContactProposal) {
+      setError("Select an existing contact or propose a new contact for this activity type.");
       return;
     }
     const missing = customFieldDefs.filter((f) => f.required && !customValues[f.key]);
@@ -189,6 +203,10 @@ export default function ActivityNew() {
       setError("Contact details are open - add at least a name, or close that section.");
       return;
     }
+    if (contactDetailsOpen && !person && !contactDetails.designation) {
+      setError("Select a designation for the new contact, or close that section.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -196,6 +214,7 @@ export default function ActivityNew() {
         type: form.type,
         gramPanchayatId: gramPanchayat?._id,
         personId: person?._id,
+        newContactProposal: hasNewContactProposal ? { ...contactDetails, name: contactDetails.name.trim() } : undefined,
         notes: form.notes.trim(),
         // clientInterest/problemSolved/durationMinutes/nextFollowUpDate are
         // no longer sent as dedicated top-level params from the frontend -
@@ -209,25 +228,36 @@ export default function ActivityNew() {
       // the activity entry itself - the log always saves immediately;
       // this part just queues up for an admin to approve before it touches
       // the real directory.
+      let proposalError = "";
       if (contactDetailsOpen && contactDetails.name.trim()) {
-        await changeRequestApi.create({
-          entityType: "Person",
-          entityId: person?._id || null,
-          proposedChanges: contactDetails,
-          reason: "Submitted while logging field activity",
-          relatedActivityLogId: entry._id,
-          // Only meaningful for a brand-new contact (person is null) - it's
-          // what lets the admin's approval actually link them to this
-          // Grampanchayat instead of creating an orphan directory entry.
-          // Confirming an *existing* contact's details doesn't need it,
-          // since that person is already linked here.
-          gramPanchayatId: !person && gramPanchayat ? gramPanchayat._id : undefined,
-        });
+        try {
+          await changeRequestApi.create({
+            entityType: "Person",
+            entityId: person?._id || null,
+            proposedChanges: contactDetails,
+            reason: "Submitted while logging field activity",
+            relatedActivityLogId: entry._id,
+            // Only meaningful for a brand-new contact (person is null) - it's
+            // what lets the admin's approval actually link them to this
+            // Grampanchayat instead of creating an orphan directory entry.
+            // Confirming an *existing* contact's details doesn't need it,
+            // since that person is already linked here.
+            gramPanchayatId: !person && gramPanchayat ? gramPanchayat._id : undefined,
+          });
+        } catch (err) {
+          // The activity itself is already saved - don't invite a re-submit
+          // (which would duplicate it); say what actually happened instead.
+          proposalError = apiErrorMessage(err);
+        }
       }
 
-      setJustSaved(true);
       resetForm();
-      setTimeout(() => setJustSaved(false), 3500);
+      if (proposalError) {
+        setError(`Activity saved, but the contact proposal could not be submitted: ${proposalError}`);
+      } else {
+        setJustSaved(true);
+        setTimeout(() => setJustSaved(false), 3500);
+      }
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
@@ -340,21 +370,8 @@ export default function ActivityNew() {
             value={person}
             onChange={selectPerson}
             emptyHint={`No contacts on file for ${displayName(gramPanchayat, language).primary} yet. Use "${t("suggestNewContact")}" below.`}
-            renderOption={(p) => (
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-medium text-ink">{p.name}</p>
-                  <p className="text-xs text-ink-muted">{p.phone || "No phone on file"}</p>
-                </div>
-                <Badge tone={designationTone(p.designation)}>{p.designation}</Badge>
-              </div>
-            )}
-            renderSelected={(p) => (
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-ink">{p.name}</p>
-                <Badge tone={designationTone(p.designation)}>{p.designation}</Badge>
-              </div>
-            )}
+            renderOption={(p) => <p className="text-sm font-medium text-ink">{contactOptionLabel(p, language)}</p>}
+            renderSelected={(p) => <p className="text-sm font-medium text-ink">{contactOptionLabel(p, language)}</p>}
           />
         ) : (
           <div>
@@ -400,11 +417,15 @@ export default function ActivityNew() {
                   <input className="field-input" value={contactDetails.nameMr} onChange={(e) => setContactDetails((c) => ({ ...c, nameMr: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="field-label">{t("designation")}</label>
-                  <select className="field-input" value={contactDetails.designation} onChange={(e) => setContactDetails((c) => ({ ...c, designation: e.target.value }))}>
+                  <label className="field-label">{t("designation")}{!person && " *"}</label>
+                  <select className="field-input" value={contactDetails.designation} onChange={(e) => setContactDetails((c) => applyDesignationChange(c, "designation", e.target.value))}>
                     <option value="">Select…</option>
-                    {DESIGNATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+                    <DesignationOptions />
                   </select>
+                </div>
+                <div>
+                  <label className="field-label">{t("designationMarathi")}</label>
+                  <DesignationMrSelect value={contactDetails.designationMr} onChange={(v) => setContactDetails((c) => applyDesignationChange(c, "designationMr", v))} />
                 </div>
                 <div>
                   <label className="field-label">{t("phone")}</label>
@@ -452,7 +473,7 @@ export default function ActivityNew() {
           <button type="submit" disabled={submitting} className="btn btn-primary">
             {submitting ? t("saving") : t("saveEntry")}
           </button>
-          <button type="button" onClick={() => navigate("/dashboard")} className="btn btn-ghost">
+          <button type="button" onClick={() => navigate(isAdmin ? "/admin/dashboard" : "/dashboard")} className="btn btn-ghost">
             {t("backToDashboard")}
           </button>
         </div>

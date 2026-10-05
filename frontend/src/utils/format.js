@@ -62,3 +62,11 @@ export function paymentModeLabel(mode) {
       return mode || "—";
   }
 }
+
+// Full, unambiguous timestamp (with year and seconds) for audit views.
+export function formatExactDateTime(dateInput) {
+  if (!dateInput) return "—";
+  return new Date(dateInput).toLocaleString("en-IN", {
+    day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit",
+  });
+}

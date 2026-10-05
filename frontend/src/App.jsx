@@ -72,6 +72,7 @@ export default function App() {
 
         <Route element={<ProtectedRoute adminOnly><AppShell /></ProtectedRoute>}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/activity/new" element={<ActivityNew />} />
           <Route path="/admin/explorer" element={<AdminExplorer />} />
           <Route path="/admin/grampanchayats" element={<AdminGramPanchayats />} />
           <Route path="/admin/grampanchayats/:id" element={<AdminGramPanchayatDetail />} />
